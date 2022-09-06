@@ -23,6 +23,7 @@
 /* USER CODE BEGIN Includes */
 #include "Lcd_character.h"
 #include "Lcd_segment.h"
+#include "Keypad.h"
 #include "Standard.h"
 /* USER CODE END Includes */
 
@@ -47,7 +48,8 @@ TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim2;
 
 /* USER CODE BEGIN PV */
-char data[]="Nam da khoi om";
+uint8_t Add_string[]="Address num:";
+uint8_t Keypad_string[]="Cur Button:";
 uint8_t data0[]="   0,0.0";
 uint8_t data1[]="0,00,00";
 uint8_t data2[]="1,2.3,456";
@@ -103,6 +105,14 @@ int main(void)
   uint8_t num[10];
   uint32_t i=0;
   
+  uint8_t key[2];
+  Keypad_Button_Type Keypad_status = BUTTON_UNKNOWN;
+  
+  uint8_t pDevide_Address[10];
+  uint8_t pClear_data[10]="  ";
+  uint8_t add,temp;
+  temp = 0xff;
+  
   HAL_TIM_Base_Start(&htim2);
   HAL_TIM_PWM_Start(&htim1,TIM_CHANNEL_1);
   Lcd_Init_4bits_Mode();
@@ -113,7 +123,8 @@ int main(void)
   //Lcd_Segment_Put_Data(data2,2);
   Lcd_Segment_Put_Indicator(0xf8);
   Lcd_Segment_Display_App();
-  
+  Lcd_Put_String(0,0,(uint8_t*)Keypad_string);
+  Lcd_Put_String(1,0,(uint8_t*)Add_string);
   //Lcd_Put_String(0,2,(uint8_t*)data);
   /* USER CODE END 2 */
 
@@ -124,12 +135,33 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    /*Lcd segment test*/
     DecToString(num,i);
     Lcd_Segment_Put_Data(num,0);
     Lcd_Segment_Put_Data(num,1);
     Lcd_Segment_Put_Data(num,2);
-    Lcd_Segment_Display_App();  
-    Lcd_Put_String(0,0,(uint8_t*)num);
+    Lcd_Segment_Display_App(); 
+
+    /*Keypad scaning test*/
+
+    Keypad_status = Keypad_Scan(key);
+    if(Keypad_status == KEYPAD_PUSHED)
+    {
+        Lcd_Put_String(0,strlen((char*)Keypad_string) + 1,(uint8_t*)pClear_data);
+        Lcd_Set_Cursor(0,strlen((char*)Keypad_string) + 1);
+        Lcd_Put_String(0,strlen((char*)Keypad_string) + 1,(uint8_t*)key);
+    }
+    
+    /*Switch test*/
+    add = Config_Switch_Get_Value();
+    if(temp != add)
+    {
+        DecToString(pDevide_Address,add);
+        temp = add;
+        Lcd_Put_String(1,strlen((char*)Add_string) + 1,(uint8_t*)pClear_data);
+        Lcd_Put_String(1,strlen((char*)Add_string) + 1,(uint8_t*)pDevide_Address);
+    }
+      
     mdelay(1);
     i++;
     if(i == 9999999)
@@ -361,7 +393,7 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOA_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7|GPIO_PIN_3, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOC, GPIO_PIN_14|GPIO_PIN_15, GPIO_PIN_RESET);
@@ -372,8 +404,8 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_6|GPIO_PIN_11, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin : PB7 */
-  GPIO_InitStruct.Pin = GPIO_PIN_7;
+  /*Configure GPIO pins : PB7 PB3 */
+  GPIO_InitStruct.Pin = GPIO_PIN_7|GPIO_PIN_3;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;

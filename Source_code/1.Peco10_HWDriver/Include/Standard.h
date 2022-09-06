@@ -60,6 +60,12 @@ typedef enum
 	E_OK = 0U,
 	E_NOT_OK = 1U
 } Std_Return_Type;
+
+typedef enum
+{
+	LCD_CHARACTER = 0U,
+	KEYPAD = 1U
+} Device_Type;
 /*==================================================================================================
 *                                  GLOBAL VARIABLE DECLARATIONS
 ==================================================================================================*/
@@ -67,8 +73,42 @@ typedef enum
 /*==================================================================================================
 *                                       FUNCTION PROTOTYPES
 ==================================================================================================*/
+/**
+ * @brief Latch input data in IC 74hc595
+ *
+ * @return void
+ *
+ */
 void IC_74hc595(uint8_t data);
+
+/**
+ * @brief Shiftout data to output IC 74hc595
+ *
+ * @return void
+ *
+ */
 void IC_74hc595_Output(void);
+
+/**
+ * @brief Shift data to specific devices
+ *
+ * @param[in]  uint8_t      :data
+ * @param[in]  Device_Type  :KEYPAD
+ *                           LCD_CHARACTER
+ *
+ * @return len of array containing number converted
+ *
+ */
+void IC_74hc595_Send_Data(uint8_t data, Device_Type Component);
+
+/**
+ * @brief Get status of input selected IC mux 74LS151
+ *
+ * @param[in]  uint8_t      :line number
+ *
+ * @return GPIO_PinState of Input line selected of IC 74LS151
+ *
+ */
 GPIO_PinState IC_74ls151(uint8_t Select_Input);
 
 /**

@@ -1,0 +1,6 @@
+load STM32G031F8Px 
+project name STCubeGenerated 
+project toolchain "MDK-ARM V5" 
+project path "F:\NamGitHub\Peco_Project\Peco10\Source_code\1.Peco10_HWDriver\MDK-ARM\RTE\Device\STM32G031F8Px\" 
+set tpl_path "C:\Users\ADMIN\AppData\Local\Arm\Packs\Keil\STM32G0xx_DFP\1.4.0\MDK\CubeMX" 
+set dest_path "STM32G031F8Px" 

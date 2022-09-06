@@ -75,7 +75,8 @@ static const uint8_t ControlData3[4U] =
 ==================================================================================================*/
 #define LCD_CS_ENABLE()           HAL_GPIO_WritePin(SCE_PORT,SCE_PIN,GPIO_PIN_SET)
 #define LCD_CS_DISABLE()          HAL_GPIO_WritePin(SCE_PORT,SCE_PIN,GPIO_PIN_RESET)
-#define LCD_CS_ENABLING()         ((GPIOC->IDR)&(uint32_t)0x4000U)
+//#define LCD_CS_ENABLING()         ((GPIOC->IDR)&(uint32_t)0x4000U)
+#define LCD_CS_ENABLING()         HAL_GPIO_ReadPin(SCE_PORT,SCE_PIN)
 
 /* LCD driver Display off (Active Low level) */
 //#define LCD_DISPLAY_ENABLE()             HAL_GPIO_WritePin(GPIOC, GPIO_PIN_15, GPIO_PIN_SET)
@@ -370,6 +371,7 @@ void Lcd_Segment_Put_Data(uint8_t* pData, uint8_t line)
     uint8_t len = strlen((char*)pData);
     if(line <= 2)
     {
+        /*clear line Lcd ram buffer data*/
         memset(&LcdDisplayRam[19 - 9 * line], 0U, 9);
         while(i<7)
         {

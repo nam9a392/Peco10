@@ -28,7 +28,8 @@
 /*==================================================================================================
 *                                  GLOBAL VARIABLE DECLARATIONS
 ==================================================================================================*/
-
+/* Variable to store pin state of the 74HC595 for Lcd character*/
+static volatile uint8_t Current_74HC595_Lcd_Data_Out = 0U;
 /*==================================================================================================
 *                                       FUNCTION PROTOTYPES
 ==================================================================================================*/
@@ -64,6 +65,22 @@ void IC_74hc595_Output(void)
     STCP_SET;
     STCP_CLR;
 }
+
+void IC_74hc595_Send_Data(uint8_t data, Device_Type Component)
+{
+    if(Component == LCD_CHARACTER)
+    {
+        Current_74HC595_Lcd_Data_Out = data;
+        IC_74hc595(DUMMY_DATA);
+        IC_74hc595(data);
+    }else if(Component == KEYPAD)
+    {
+        IC_74hc595(data);
+        IC_74hc595(Current_74HC595_Lcd_Data_Out);
+    }
+    IC_74hc595_Output();
+}
+
 
 GPIO_PinState IC_74ls151(uint8_t Select_Input)
 {

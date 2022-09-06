@@ -68,6 +68,16 @@ void Lcd_Init_4bits_Mode(void);
 void Lcd_Clear(void);
 
 /**
+ * @brief  This function uses to put character to current position
+ *
+ * @param[in]  data   :ASCII character
+ *
+ * @retval void
+ *
+ */
+void Lcd_Put_Char(uint8_t data);
+
+/**
  * @brief  This function uses to put string to (x,y) position
  *
  * @param[in]  x         :x position

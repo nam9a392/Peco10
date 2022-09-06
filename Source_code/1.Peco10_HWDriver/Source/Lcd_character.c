@@ -37,7 +37,6 @@ static void Lcd_Instruction_Enable(void);
 static void Lcd_Instruction_Disable(void);
 static void Lcd_Enable_Pin_Low(void);
 static void Lcd_Enable_Pin_High(void);
-static void Lcd_Put_Char(uint8_t data);
 static void lcd_enable(void);
 /*==================================================================================================
 *                                         LOCAL FUNCTIONS
@@ -52,9 +51,7 @@ static void Lcd_Instruction_Enable(void)
     /* Write 0 logic to Q4 Pin of 74HC595 */
     Current_74HC595_Data_Out &= ~((uint8_t)0x10U);
     /* Shift data to 74HC595 */
-    IC_74hc595(Current_74HC595_Data_Out);
-    /* Latch data to the output pin */
-    IC_74hc595_Output();
+    IC_74hc595_Send_Data(Current_74HC595_Data_Out,LCD_CHARACTER);
     
 }
 
@@ -68,9 +65,7 @@ static void Lcd_Instruction_Disable(void)
     /* Write 1 logic to Q4 Pin of 74HC595 */
     Current_74HC595_Data_Out |= ((uint8_t)0x10U);
     /* Shift data to 74HC595 */
-    IC_74hc595(Current_74HC595_Data_Out);
-    /* Latch data to the output pin */
-    IC_74hc595_Output();
+    IC_74hc595_Send_Data(Current_74HC595_Data_Out,LCD_CHARACTER);
 }
     
 /**
@@ -83,9 +78,7 @@ static void Lcd_Enable_Pin_Low(void)
     /* Write 0 logic to Q5 Pin of 74HC595 */
     Current_74HC595_Data_Out &= ~((uint8_t)0x20U);
     /* Shift data to 74HC595 */
-    IC_74hc595(Current_74HC595_Data_Out);
-    /* Latch data to the output pin */
-    IC_74hc595_Output();
+    IC_74hc595_Send_Data(Current_74HC595_Data_Out,LCD_CHARACTER);
 }
 
 /**
@@ -98,9 +91,7 @@ static void Lcd_Enable_Pin_High(void)
     /* Write 1 logic to Q5 Pin of 74HC595 */
     Current_74HC595_Data_Out |= ((uint8_t)0x20U);
     /* Shift data to 74HC595 */
-    IC_74hc595(Current_74HC595_Data_Out);
-    /* Latch data to the output pin */
-    IC_74hc595_Output();
+    IC_74hc595_Send_Data(Current_74HC595_Data_Out,LCD_CHARACTER);
 }
 
 static void lcd_enable(void)
@@ -125,9 +116,8 @@ static void Lcd_Write_4bits(uint8_t data)
     /* Override the 4 bit low */
     Current_74HC595_Data_Out |= (data & (uint8_t)0x0FU);
 	/* Shift data to 74HC595 */
-    IC_74hc595(Current_74HC595_Data_Out);
-    /* Latch data to the output pin */
-    IC_74hc595_Output();
+    
+    IC_74hc595_Send_Data(Current_74HC595_Data_Out,LCD_CHARACTER);
     
 	lcd_enable();
 }
@@ -145,7 +135,7 @@ static void lcd_send_command(uint8_t cmd)
  * This function sends a character to the LCD
  * Here we are using 4 bits parallel data transmission
  * */
-static void Lcd_Put_Char(uint8_t data)
+void Lcd_Put_Char(uint8_t data)
 {
     /*RS = 1, for LCD user data*/
     Lcd_Instruction_Disable();
