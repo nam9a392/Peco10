@@ -26,6 +26,10 @@ typedef struct{
     uint8_t *pData;
 }command_t;
 
+typedef struct{
+    Keypad_Button_Type InputKey;
+    uint8_t KeyInputComplete;
+}KeypadInputStatus_t;
 /*Aplication states*/
 /**
  * @brief @SYSTEMSTATE : Current state of preset
@@ -58,8 +62,8 @@ typedef struct{
 #define LCDCHARACTER_MSGQUEUE_OBJ_t            msg_t
 #define LCDCHARACTER_MSGQUEUE_OBJECTS          2U
 
-#define KEYPAD_QUEUE_OBJ_t                     uint8_t
-#define KEYPAD_QUEUE_OBJECTS                   30
+#define KEYPAD_QUEUE_OBJ_t                     KeypadInputStatus_t
+#define KEYPAD_QUEUE_OBJECTS                   20
 
 /*Pool memory data define*/
 #define NUMBER_OF_MEMORY_POOL_ELEMENT       2U
@@ -141,7 +145,6 @@ static void HexDataToString(uint8_t *pData,uint8_t DataLength, uint8_t *pString)
 static void LcdSegmentProcess(uint8_t opcode,uint8_t* pData);
 static void LcdCharacterProcess(uint8_t opcode,uint8_t* pData);
 static uint8_t CheckSum(uint8_t* pData, uint8_t Length);
-static uint8_t SpecialKeyCheck(uint8_t PreviousPos,uint8_t CurrentPos);
 
 void Timer1_Callback (void *arg);
 void Timer2_Callback (void *arg);
@@ -302,61 +305,39 @@ Std_Return_Type extract_command(command_t *pCmd)
 /************************************ Task handler *******************************************/
 static void LcdSegmentDisplay_Task(void *argument)
 {
-    uint32_t flag;
+    //uint32_t flag;
     Lcd_Segment_Put_Indicator(INDICATOR_A1|INDICATOR_A3|INDICATOR_A4|INDICATOR_A5);
     
     while(1)
     {
-        flag = osEventFlagsWait(LcdSegmentStartDisplayFlagId, LCD_SEGMENT_START_DISPLAY_FLAG, osFlagsWaitAny, osWaitForever);
+        osEventFlagsWait(LcdSegmentStartDisplayFlagId, LCD_SEGMENT_START_DISPLAY_FLAG, osFlagsWaitAny, osWaitForever);
         Lcd_Segment_Start_Display();
     }
 }
 
 volatile Std_Return_Type gInputDone = E_NOT_OK;
-#define REGISTER_KEY           0xff
+#define KEY_NEED_CHECK(x)      ((x == KEYPAD_NUMBER_0) || (x == KEYPAD_NUMBER_1) || \
+                               (x == KEYPAD_NUMBER_2) || (x == KEYPAD_NUMBER_3) || \
+                               (x == KEYPAD_NUMBER_4) || (x == KEYPAD_NUMBER_5) || \
+                               (x == KEYPAD_NUMBER_6) || (x == KEYPAD_NUMBER_7) || \
+                               (x == KEYPAD_NUMBER_8) || (x == KEYPAD_NUMBER_9) || \
+                               (x == KEYPAD_ENTER) || (x == KEYPAD_CLEAR))
 
-
-#define SPECIAL_KEY         0xfcU
 static void ScanKeypad_DisplayLcdCharacter_Task(void *argument)
 {
-    const uint8_t Add_string[]="Address num:";
-    const uint8_t Keypad_string[]="Cur Button:";
-    const uint8_t clear[]=" ";
-    const uint8_t maintaince[]="code";
-    const uint8_t codetest[]="8888888";
+    osStatus_t LcdQueueStatus;
     msg_t data1;
-    uint8_t key[3],Lcd_character_pos;
-    Lcd_character_pos=0;
-    uint8_t CurrentPos,PreviousPos;
-    CurrentPos = 19;
-    PreviousPos = 0;
-    uint8_t KeyNotPushed = SPECIAL_KEY;
-    osStatus_t status;
-    Keypad_Button_Type KeypadPreviousStatus,KeypadCurrentStatus;
-    KeypadPreviousStatus = KeypadCurrentStatus = BUTTON_UNKNOWN;
-
-    
-    uint8_t pushtime,temp;
-    pushtime = temp = 0;
-    uint8_t character_pos = LCD_CURRENT_POSITION;
-//    Lcd_Segment_Put_Data((uint8_t*)codetest,0,0);
-//    Lcd_Segment_Put_Data((uint8_t*)codetest,1,0);
-//    Lcd_Segment_Put_Data((uint8_t*)codetest,2,0);
-//    LcdSegmentDisplaySetEvent();
-    //LcdCharacter_PutString(0,7,(uint8_t*)Keypad_string,0);
-    //LcdCharacter_PutString(0,2,(uint8_t*)Add_string,0);
+    uint8_t KeyPushed = 0;
+    Keypad_Button_Type CurrentStatus,PreviousStatus,KeypadInput;
+    KeypadInput = PreviousStatus = CurrentStatus = KEYPAD_UNKNOWN;
     osTimerStart(Timer1_Id,KEYPAD_SCANNING_DURATION);
     
     while(1)
     {
         /* Lcd character print*/
         /* pop data from lcd character massage queue*/
-        status = osMessageQueueGet(LcdCharacterMsgQueue_Id, &data1, NULL, 0U);   // wait for message
-        if (status == osOK) {
-//            for(uint8_t i=0; i<=strlen((char*)data1.msg); i++)
-//            {
-//                Lcd_Put_String(data1.line,data1.offset + i,(uint8_t *)clear);    //clear data before display
-//            }
+        LcdQueueStatus = osMessageQueueGet(LcdCharacterMsgQueue_Id, &data1, NULL, 0U);   // wait for message
+        if (LcdQueueStatus == osOK) {
             Lcd_Put_String(data1.line,data1.offset,data1.msg);
         }
         
@@ -364,112 +345,40 @@ static void ScanKeypad_DisplayLcdCharacter_Task(void *argument)
         if(E_OK == KeypadScaningStatus)
         {
             KeypadScaningStatus = E_NOT_OK;
-            KeypadCurrentStatus = Keypad_Scan_Position(&CurrentPos);
-            if(KeypadCurrentStatus != KeypadPreviousStatus)
+            CurrentStatus = Keypad_Scan_Position();
+            if(CurrentStatus != PreviousStatus)
             {
-                KeypadPreviousStatus = KeypadCurrentStatus;
-                if(KEYPAD_PUSHED == KeypadCurrentStatus)
+                if(KEYPAD_LOSS == CurrentStatus)
                 {
-                    KeyNotPushed = SpecialKeyCheck(PreviousPos,CurrentPos);
-                    PreviousPos = CurrentPos;
+                }
+                else if(KEYPAD_UNKNOWN != CurrentStatus)
+                {
+                    KeyPushed = 1;
+                    if(KEY_NEED_CHECK(CurrentStatus))
+                    {
+                        osTimerStart(Timer2_Id,KEYPAD_CHECKING_DURATION);
+                    }else{
+                        osTimerStop(Timer2_Id);
+                    }
                     /* Play Buzzer */
                     //Buzzer_Play();
                 }
+                PreviousStatus = CurrentStatus;
             }
         }
-        if(KeyNotPushed != SPECIAL_KEY)
+        if(E_OK == gInputDone)
         {
-            if(temp != 0xFF)
-            {
-                if(curr_state == PRINTER_SETTING)
-                {
-                    Keypad_Mapping_Printer(key,CurrentPos,KeyNotPushed);
-                }else{
-                    Keypad_Mapping(key,CurrentPos);
-                }
-                Lcd_Segment_Put_Data(key,2,5);
-                LcdSegmentDisplaySetEvent();
-                if(E_OK == gInputDone)
-                {
-                    gInputDone = E_NOT_OK;
-                    LcdCharacter_PutString(LCD_NEXT_POSITION,LCD_NEXT_POSITION,key,0);
-                }else{
-                    LcdCharacter_PutString(LCD_CURRENT_POSITION,LCD_CURRENT_POSITION,key,0);
-                }
-            }else{
-                LcdCharacter_PutString(1,0,(uint8_t*)maintaince,0);
-                Lcd_Segment_Put_Data((uint8_t*)maintaince,1,0);
-                LcdSegmentDisplaySetEvent();
-            }
-            KeyNotPushed = SPECIAL_KEY;
+            gInputDone = E_NOT_OK;
+            KeypadInput = KEYPAD_UNKNOWN;
+            osMessageQueuePut(KeypadInputQueue_Id, &KeypadInput, 0U, 0);
+        }
+        if(1 == KeyPushed)
+        {
+            KeyPushed = 0;
+            KeypadInput = CurrentStatus;
+            osMessageQueuePut(KeypadInputQueue_Id, &KeypadInput, 0U, 0);
         }
     }
-}
-const uint8_t Password[] = "XXCXC";
-const uint8_t Password1[] = "CCC";
-uint8_t check_pos = 0;
-
-
-static uint8_t SpecialKeyCheck(uint8_t PreviousPos,uint8_t CurrentPos)
-{
-    uint8_t retValue = SPECIAL_KEY;
-    uint8_t checkCharacter[3];
-    Keypad_Mapping(checkCharacter,CurrentPos);
-    if(PRINTER_SETTING == curr_state)
-    {
-        if((checkCharacter[0] >='0') && (checkCharacter[0] <= '9'))
-        {
-            if(CurrentPos != PreviousPos)
-            {
-                gInputDone = E_OK;
-                check_pos = 0;
-            }else if((CurrentPos == PreviousPos) && (gInputDone == E_NOT_OK))
-            {
-                check_pos++;
-            }
-            retValue = check_pos;
-            osTimerStart(Timer2_Id,500);
-        }else if(CurrentPos == FORWARD)
-        {
-            Lcd_Move_Cursor_Right();
-            gInputDone = E_NOT_OK;
-        }else if(CurrentPos == BACKWARD)
-        {
-            Lcd_Move_Cursor_Left();
-            gInputDone = E_NOT_OK;
-        }
-        else if(CurrentPos == CLEAR)
-        {
-            Lcd_Clear_Character();
-        }else if(CurrentPos == FONT)
-        {
-            Keypad_Change_Font();
-        }else if(CurrentPos != ENTER)
-        {
-            gInputDone = E_OK;
-            osTimerStop(Timer2_Id);
-            check_pos = 0;
-            retValue = check_pos;
-        }
-    }else{
-        if((CurrentPos == CLEAR) || (CurrentPos == ENTER))
-        {
-            if(checkCharacter[0] == Password[check_pos])
-            {
-                if(check_pos == (strlen((char*)Password) - 1))
-                {
-                    osTimerStop(Timer2_Id);
-                    check_pos = 0;
-                    retValue = 0xFF;
-                }else{
-                    check_pos++;
-                    osTimerStart(Timer2_Id,1000);
-                }
-            }
-        }
-    }
-    
-    return retValue;
 }
 
 static void CommandHandler_Task(void *argument)
@@ -532,10 +441,65 @@ static void CommandHandler_Task(void *argument)
         }
 	}
 }
-
+const uint8_t Password[] = {KEYPAD_ENTER,KEYPAD_ENTER,KEYPAD_CLEAR,KEYPAD_ENTER,KEYPAD_CLEAR};
+const uint8_t Password1[] = {KEYPAD_CLEAR,KEYPAD_CLEAR,KEYPAD_CLEAR};
+uint8_t Password_check = 0;
+void SpecialKeyCheck(Keypad_Button_Type *PreviousKey,Keypad_Button_Type CurrentKey, uint8_t *PushTime);
 static void Main_Preset_Task(void *argument)
 {
-    
+    uint8_t PushTime=0;
+    Keypad_Button_Type PreviousKey,CurrentKey;
+    PreviousKey = CurrentKey = KEYPAD_UNKNOWN;
+    osStatus_t status;
+    while(1)
+    {
+        status = osMessageQueueGet(KeypadInputQueue_Id, &CurrentKey, NULL, osWaitForever);
+        if(status == osOK)
+            SpecialKeyCheck(&PreviousKey,CurrentKey,&PushTime);
+    }
+}
+
+void SpecialKeyCheck(Keypad_Button_Type *PreviousKey,Keypad_Button_Type CurrentKey, uint8_t *PushTime)
+{
+    uint8_t key[3];
+    if(CurrentKey == KEYPAD_FORWARD)
+    {
+        Lcd_Move_Cursor_Right();
+    }else if(CurrentKey == KEYPAD_BACKWARD)
+    {
+        Lcd_Move_Cursor_Left();
+    }else if(CurrentKey == KEYPAD_FONT)
+    {
+        Keypad_Change_Font();
+    }else if(CurrentKey == KEYPAD_SPACE)
+    {
+        //TO DO
+        LcdCharacter_PutString(LCD_NEXT_POSITION,LCD_NEXT_POSITION,(uint8_t*)" ",0);
+    }else if(CurrentKey == KEYPAD_CLEAR)
+    {
+        Lcd_Clear_Character();
+    }else if(CurrentKey == KEYPAD_ENTER)
+    {
+        //TO DO
+    }else if(CurrentKey == KEYPAD_UNKNOWN)
+    {
+//        *PushTime = 0;
+    }else
+    {
+        if(*PreviousKey == CurrentKey)
+        {
+            *PushTime = *PushTime + 1;
+            Keypad_Mapping_Printer(key,CurrentKey,*PushTime);
+            LcdCharacter_PutString(LCD_CURRENT_POSITION,LCD_CURRENT_POSITION,key,0);
+        }else{
+            *PushTime = 0;
+            Keypad_Mapping_Printer(key,CurrentKey,*PushTime);
+            LcdCharacter_PutString(LCD_NEXT_POSITION,LCD_NEXT_POSITION,key,0);
+        }
+        Lcd_Segment_Put_Data(key,2,5);
+        LcdSegmentDisplaySetEvent();
+    }
+    *PreviousKey = CurrentKey;
 }
 
 /************************************ Callback handler *******************************************/
@@ -547,7 +511,6 @@ void Timer1_Callback (void *arg)
 void Timer2_Callback (void *arg)
 {
     gInputDone = E_OK;
-    check_pos = 0;
 }
 /*==================================================================================================
 *                                        GLOBAL FUNCTIONS

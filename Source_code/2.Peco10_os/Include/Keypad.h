@@ -20,11 +20,6 @@
 #define NUM_ROWS    4
 #define NUM_COLS    4
 
-#define CLEAR       14
-#define ENTER       13
-#define FONT        15
-#define FORWARD     3
-#define BACKWARD    7
 /*==================================================================================================
                                            CONSTANTS
 ==================================================================================================*/
@@ -47,23 +42,38 @@ static char* KeyMap_Printer_Uppercase[NUM_ROWS*NUM_COLS]={
 "7STU","8VWX","9YZ" ,"",
 "4JKL","5MNO","6PQR","",
 "1ABC","2DEF","3GHI"," ",
-"0.,"   ,"X"   ,"C"   ,""
+"0.," ,"X"   ,"C"   ,""
 };
 
 static char* KeyMap_Printer_Lowercase[NUM_ROWS*NUM_COLS]={
 "7stu","8vwx","9yz" ,"",
 "4jkl","5mno","6pqr","",
 "1abc","2def","3ghi"," ",
-"0.,"   ,"X"   ,"C"   ,""
+"0.," ,"X"   ,"C"   ,""
 };
 
 /*==================================================================================================
 *                                              ENUMS
 ==================================================================================================*/
 typedef enum{
-    BUTTON_UNKNOWN      = 0U,
-    KEYPAD_LOSS         = 1U,
-    KEYPAD_PUSHED       = 2U
+    KEYPAD_NUMBER_7     = 0U,
+    KEYPAD_NUMBER_8     = 1U,
+    KEYPAD_NUMBER_9     = 2U,
+    KEYPAD_FORWARD      = 3U,
+    KEYPAD_NUMBER_4     = 4U,
+    KEYPAD_NUMBER_5     = 5U,
+    KEYPAD_NUMBER_6     = 6U,
+    KEYPAD_BACKWARD     = 7U,
+    KEYPAD_NUMBER_1     = 8U,
+    KEYPAD_NUMBER_2     = 9U,
+    KEYPAD_NUMBER_3     = 10U,
+    KEYPAD_SPACE        = 11U,
+    KEYPAD_NUMBER_0     = 12U,
+    KEYPAD_ENTER        = 13U,
+    KEYPAD_CLEAR        = 14U,
+    KEYPAD_FONT         = 15U,
+    KEYPAD_UNKNOWN      ,
+    KEYPAD_LOSS   
 }Keypad_Button_Type;
 
 /*==================================================================================================
@@ -92,7 +102,7 @@ void Keypad_Mapping(uint8_t *Character, uint8_t pos);
 void Keypad_Mapping_Printer(uint8_t *Character, uint8_t pos, uint8_t push_number);
 void Keypad_Change_Font(void);
 
-Keypad_Button_Type Keypad_Scan_Position(uint8_t *pos);
+Keypad_Button_Type Keypad_Scan_Position(void);
 /**
  * @brief  This function uses to return vaue of the switch which define address of device 
  *

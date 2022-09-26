@@ -73,9 +73,9 @@ static GPIO_PinState Read_Row(uint8_t Num_Row)
 ==================================================================================================*/
 
 
-Keypad_Button_Type Keypad_Scan_Position(uint8_t *pos)
+Keypad_Button_Type Keypad_Scan_Position(void)
 {
-    Keypad_Button_Type eKeypad_Status = BUTTON_UNKNOWN;
+    Keypad_Button_Type eKeypad_Status = KEYPAD_UNKNOWN;
     uint8_t row,col;
     uint8_t KeypadLoss = KEYPAD_NOT_CONNECTED;
     row = col = 0;
@@ -89,14 +89,13 @@ Keypad_Button_Type Keypad_Scan_Position(uint8_t *pos)
             /* Get row state sequentially */
             if(GPIO_PIN_RESET == Read_Row(row))
             {
-                *pos = row * NUM_COLS + col;
-                eKeypad_Status = KEYPAD_PUSHED;
+                eKeypad_Status = (Keypad_Button_Type)(row * NUM_COLS + col);
                 if(KeypadLoss == KEYPAD_CONNECTED)
                     break;
             }else{
                 KeypadLoss = KEYPAD_CONNECTED;
                 /* out of loop if at least one button checked HIGH*/
-                if(eKeypad_Status == KEYPAD_PUSHED)
+                if(eKeypad_Status != KEYPAD_UNKNOWN)
                     break;
             }
         }
@@ -110,7 +109,6 @@ void Keypad_Mapping(uint8_t *Character, uint8_t pos)
 {
     strcpy((char*)Character,KeyMap[pos]);
 }
-
 
 void Keypad_Mapping_Printer(uint8_t *Character, uint8_t pos, uint8_t push_number)
 {
@@ -132,15 +130,14 @@ void Keypad_Change_Font(void)
 
 Keypad_Button_Type Keypad_Scan(uint8_t *pkey)
 {
-    uint8_t KeypadPosition;
-    Keypad_Button_Type KeypadStatus = BUTTON_UNKNOWN;
+    Keypad_Button_Type KeypadPosition;
     
-    KeypadStatus = Keypad_Scan_Position(&KeypadPosition);
-    if(KEYPAD_PUSHED == KeypadStatus)
+    KeypadPosition = Keypad_Scan_Position();
+    if((KEYPAD_UNKNOWN != KeypadPosition)&&(KEYPAD_LOSS != KeypadPosition))
     {
         Keypad_Mapping(pkey,KeypadPosition);
     }
-    return KeypadStatus;
+    return KeypadPosition;
 }
 
 uint8_t Config_Switch_Get_Value(void)

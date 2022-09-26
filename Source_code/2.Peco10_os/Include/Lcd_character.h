@@ -16,9 +16,10 @@
 /*Lcd commands  */
 /* 4bits, 2lines, 5x8 */
 #define LCD_CMD_4DL_2N_5X8F			0x28
+
 /* Display on, cursor on, cursor not blink */
 #define LCD_CMD_DON_CURON			0x0E
-/* Display on, cursor on, cursor not blink */
+/* Display on, cursor off, cursor not blink */
 #define LCD_CMD_DON_CUROFF			0x0C
 
 /* cursor move direction is increment */
@@ -28,10 +29,10 @@
 /* Return Cursor to home */
 #define LCD_CMD_DIS_RETURN_HOME		0x02
 
-#define LCD_DISPLAY_SHIFT           0x8
-#define LCD_CURSOR_MOVE             ~LCD_DISPLAY_SHIFT
+#define LCD_DISPLAY_SHIFT           0x18
+#define LCD_CURSOR_MOVE             0X10
 #define LCD_SHIFT_RIGHT             0x4
-#define LCD_SHIFT_LEFT              ~LCD_SHIFT_RIGHT
+#define LCD_SHIFT_LEFT              0
 
 #define LCD_CURRENT_POSITION        0xff
 #define LCD_NEXT_POSITION           0xfe
