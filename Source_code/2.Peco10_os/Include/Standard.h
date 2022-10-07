@@ -15,6 +15,7 @@
 #include <stdint.h>
 #include <string.h>
 #include "cmsis_os2.h"
+#include <assert.h>
 /*==================================================================================================
                                        DEFINES AND MACROS
 ==================================================================================================*/
@@ -79,6 +80,21 @@ typedef enum
 	LCD_CHARACTER = 0U,
 	KEYPAD = 1U
 } Device_Type;
+
+typedef struct{
+    uint16_t tail;
+    uint16_t head;
+    uint16_t n_elem;
+}RingBufferManageQueue_t;
+
+typedef struct {
+	uint8_t * buffer;
+	uint8_t head;
+	uint8_t tail;
+	uint8_t max; //of the buffer
+}circular_buf_t ;
+
+typedef circular_buf_t* cbuf_handle_t;
 /*==================================================================================================
 *                                  GLOBAL VARIABLE DECLARATIONS
 ==================================================================================================*/
@@ -132,6 +148,7 @@ GPIO_PinState IC_74ls151(uint8_t Select_Input);
  */
 uint8_t DecToString(uint8_t *pData,uint32_t number);
 
+/******************************** Delay function **********************************************/
 /**
  * @brief function use to delay in micro second
  */

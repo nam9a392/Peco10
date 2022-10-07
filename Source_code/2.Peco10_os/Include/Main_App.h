@@ -17,8 +17,6 @@
 /*==================================================================================================
                                        DEFINES AND MACROS
 ==================================================================================================*/
-#define NUMBER_OF_MEMORY_POOL_ELEMENT       2U
-#define MEMORY_POOL_ELEMENT_SIZE            100U
 
 #define KEYPAD_SCANNING_DURATION            30U
 #define KEYPAD_CHECKING_DURATION            300U

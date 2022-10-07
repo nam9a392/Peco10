@@ -15,17 +15,17 @@
                                        DEFINES AND MACROS
 ==================================================================================================*/
 #define RS485_DE_PORT               GPIOA
-#define RS485_DE_PIN                0U
+#define RS485_DE_PIN                GPIO_PIN_0
 #define RS485_INSTANCE              (&huart2)
 
 /* 
  * Turn this macro to STD_ON if using timer to detect frame
  * In case using the delimiter to detect frame. Leave it as STD_OFF
  */
-#define RS485_USING_TIMER_TO_DETECT_FRAME        (STD_ON)
+#define RS485_USING_TIMER_TO_DETECT_FRAME        STD_ON
 
 /* RS485 Frame Loopback enabled */
-#define RS485_FRAME_LOOPBACK_ENABLED             (STD_ON)
+#define RS485_FRAME_LOOPBACK_ENABLED             STD_ON
 
 /* Time interval between two frames (in ms) */
 #define RS485_TIME_INTERVAL                     (3U)
@@ -37,8 +37,13 @@
 
 #define RS485_BUFF_SIZE                          256U
 
-#define STX                                 0x02U
-#define ETX                                 0x03U
+#define STX                0x02U
+#define ETX                0x03U
+
+#define EOT                0x04U
+#define ACK                0x06U
+#define NACK               0x15U
+#define POL                0x05U
 /*==================================================================================================
                                            CONSTANTS
 ==================================================================================================*/
@@ -78,7 +83,7 @@ void RS485_Init(void);
  * @return Std_Return_Type
  *
  */
-Std_Return_Type RS485_Transmit(uint8_t* pData, uint32_t length);
+Std_Return_Type RS485_Transmit(uint8_t* pData_RS485, uint32_t length);
 
 /**
  * @brief

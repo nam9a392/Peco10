@@ -31,49 +31,38 @@
 //{'*','0','#','D'}
 //};
 
-static char* KeyMap[NUM_ROWS*NUM_COLS]={
-"7","8","9","F1",
-"4","5","6","F2",
-"1","2","3","F3",
-"0","X","C","F4"
+static const char KeyMap[NUM_ROWS*NUM_COLS]={
+'7','8','9',' ',
+'4','5','6',' ',
+'1','2','3',' ',
+'0','X','C',' '
 };
 
-static char* KeyMap_Printer_Uppercase[NUM_ROWS*NUM_COLS]={
+static const char* KeyMap_Printer_Uppercase[NUM_ROWS*NUM_COLS]={
 "7STU","8VWX","9YZ" ,"",
 "4JKL","5MNO","6PQR","",
 "1ABC","2DEF","3GHI"," ",
-"0.," ,"X"   ,"C"   ,""
+"0., ","X"   ,"C"   ,""
 };
 
-static char* KeyMap_Printer_Lowercase[NUM_ROWS*NUM_COLS]={
+static const char* KeyMap_Printer_Lowercase[NUM_ROWS*NUM_COLS]={
 "7stu","8vwx","9yz" ,"",
 "4jkl","5mno","6pqr","",
 "1abc","2def","3ghi"," ",
-"0.," ,"X"   ,"C"   ,""
+"0., ","X"   ,"C"   ,""
 };
 
 /*==================================================================================================
 *                                              ENUMS
 ==================================================================================================*/
 typedef enum{
-    KEYPAD_NUMBER_7     = 0U,
-    KEYPAD_NUMBER_8     = 1U,
-    KEYPAD_NUMBER_9     = 2U,
-    KEYPAD_FORWARD      = 3U,
-    KEYPAD_NUMBER_4     = 4U,
-    KEYPAD_NUMBER_5     = 5U,
-    KEYPAD_NUMBER_6     = 6U,
-    KEYPAD_BACKWARD     = 7U,
-    KEYPAD_NUMBER_1     = 8U,
-    KEYPAD_NUMBER_2     = 9U,
-    KEYPAD_NUMBER_3     = 10U,
-    KEYPAD_SPACE        = 11U,
-    KEYPAD_NUMBER_0     = 12U,
-    KEYPAD_ENTER        = 13U,
-    KEYPAD_CLEAR        = 14U,
-    KEYPAD_FONT         = 15U,
+    KEYPAD_NUMBER_7  = 0U,      KEYPAD_NUMBER_8  = 1U,      KEYPAD_NUMBER_9  = 2U,      KEYPAD_FORWARD   = 3U,
+    KEYPAD_NUMBER_4  = 4U,      KEYPAD_NUMBER_5  = 5U,      KEYPAD_NUMBER_6  = 6U,      KEYPAD_BACKWARD  = 7U,
+    KEYPAD_NUMBER_1  = 8U,      KEYPAD_NUMBER_2  = 9U,      KEYPAD_NUMBER_3  = 10U,     KEYPAD_SPACE     = 11U,
+    KEYPAD_NUMBER_0  = 12U,     KEYPAD_ENTER     = 13U,     KEYPAD_CLEAR     = 14U,     KEYPAD_FONT      = 15U,
+    
     KEYPAD_UNKNOWN      ,
-    KEYPAD_LOSS   
+    KEYPAD_LOSS      
 }Keypad_Button_Type;
 
 /*==================================================================================================
@@ -98,8 +87,8 @@ typedef enum{
  */
 Keypad_Button_Type Keypad_Scan(uint8_t *pkey);
 
-void Keypad_Mapping(uint8_t *Character, uint8_t pos);
-void Keypad_Mapping_Printer(uint8_t *Character, uint8_t pos, uint8_t push_number);
+uint8_t Keypad_Mapping(uint8_t pos);
+uint8_t Keypad_Mapping_Printer(uint8_t pos, uint8_t push_number);
 void Keypad_Change_Font(void);
 
 Keypad_Button_Type Keypad_Scan_Position(void);

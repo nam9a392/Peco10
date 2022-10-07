@@ -119,6 +119,7 @@ void Lcd_Put_String(uint8_t line, uint8_t offset, uint8_t *pString);
 void Lcd_Set_Cursor(uint8_t line, uint8_t offset);
 void Lcd_Move_Cursor_Right(void);
 void Lcd_Move_Cursor_Left(void);
+void Lcd_Move_Cursor_Next_Line(void);
 
 /**
  * @brief  This function uses to turn on the lcd cursor

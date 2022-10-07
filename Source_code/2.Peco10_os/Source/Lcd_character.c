@@ -317,6 +317,12 @@ void Lcd_Move_Cursor_Left(void)
     }
 }
 
+void Lcd_Move_Cursor_Next_Line(void)
+{
+    Current_Cursor_Posistion.line ^= 1;
+    Lcd_Set_Cursor(Current_Cursor_Posistion.line,Current_Cursor_Posistion.col);
+}
+
 void Lcd_Set_Cursor(uint8_t line, uint8_t offset)
 {
     Current_Cursor_Posistion.line = line;

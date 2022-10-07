@@ -105,21 +105,21 @@ Keypad_Button_Type Keypad_Scan_Position(void)
     return eKeypad_Status;
 }
 
-void Keypad_Mapping(uint8_t *Character, uint8_t pos)
+uint8_t Keypad_Mapping(uint8_t pos)
 {
-    strcpy((char*)Character,KeyMap[pos]);
+    return KeyMap[pos];
 }
 
-void Keypad_Mapping_Printer(uint8_t *Character, uint8_t pos, uint8_t push_number)
+uint8_t Keypad_Mapping_Printer(uint8_t pos, uint8_t push_number)
 {
     char character_pos;
     if(gFontType == FONT_LOWERCASE)
     {
         character_pos = (push_number) % strlen(KeyMap_Printer_Lowercase[pos]);
-        sprintf((char*)Character,"%c",KeyMap_Printer_Uppercase[pos][character_pos]);
+        return KeyMap_Printer_Uppercase[pos][character_pos];
     }else{
         character_pos = (push_number) % strlen(KeyMap_Printer_Uppercase[pos]);
-        sprintf((char*)Character,"%c",KeyMap_Printer_Lowercase[pos][character_pos]);
+        return KeyMap_Printer_Lowercase[pos][character_pos];
     }
 }
 
@@ -135,7 +135,7 @@ Keypad_Button_Type Keypad_Scan(uint8_t *pkey)
     KeypadPosition = Keypad_Scan_Position();
     if((KEYPAD_UNKNOWN != KeypadPosition)&&(KEYPAD_LOSS != KeypadPosition))
     {
-        Keypad_Mapping(pkey,KeypadPosition);
+        *pkey = Keypad_Mapping(KeypadPosition);
     }
     return KeypadPosition;
 }
@@ -143,6 +143,7 @@ Keypad_Button_Type Keypad_Scan(uint8_t *pkey)
 uint8_t Config_Switch_Get_Value(void)
 {
     uint8_t Switch_value = 0;
+    uint8_t Main_Address = 0x20;
     uint8_t Mux_input_status = 0;
     for (uint8_t i =0; i < 4 ; i++)
     {
@@ -150,5 +151,7 @@ uint8_t Config_Switch_Get_Value(void)
         Mux_input_status = (uint8_t)IC_74ls151(i + MUX_D4_SEL);
         Switch_value = Switch_value | (Mux_input_status << i);
     }
-    return Switch_value;
+    /*Return main address*/
+    Main_Address = 0x20 + (Switch_value & 0x3)*4 + ((Switch_value & 0x4) >> 2);
+    return Main_Address;
 }
