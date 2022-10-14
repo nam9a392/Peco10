@@ -85,7 +85,7 @@ void Lcd_Segment_Init(void);
  * @retval void
  *
  */
-void Lcd_Segment_Put_Data(uint8_t* pData, uint8_t line, uint8_t col);
+void Lcd_Segment_Put_Data(uint8_t* pData,uint8_t len, uint8_t line, uint8_t col);
 
 /**
  * @brief  This function uses to prepare data which will be displayed in indicator position in LCD segment
@@ -97,7 +97,7 @@ void Lcd_Segment_Put_Data(uint8_t* pData, uint8_t line, uint8_t col);
  */
 void Lcd_Segment_Put_Indicator(uint8_t Data);
 
-
+void Lcd_Segment_Clear_Line(uint8_t line);
 
 /**
  * @brief  This function uses to get the current code is diaplayed in LCD segment

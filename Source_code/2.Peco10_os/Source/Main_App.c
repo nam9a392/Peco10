@@ -26,6 +26,18 @@ typedef struct{
     uint8_t *pData;
 }command_t;
 
+typedef struct{
+    Keypad_Button_Type  PreviousStatus;
+    Keypad_Button_Type  CurrentStatus;
+    uint8_t             PushTime;
+}KeypadStatus_t;
+
+typedef struct{
+    uint8_t *pPasscode;
+    uint8_t length;
+    uint8_t CheckingStatus;
+}Password_t;
+
 //typedef struct{
 //    Keypad_Button_Type InputKey;
 //    uint8_t KeyInputComplete;
@@ -42,11 +54,9 @@ typedef struct{
 /**
  * @brief @SYSTEMSUBSTATE : Current Substate of preset
  */
-#define LOGIN_STATE                        ((uint8_t)0x00U)
-#define TOTALIZER_READING_STATE            ((uint8_t)0x01U)
-#define USER_REGISTRATION_STATE            ((uint8_t)0x02U)
-#define MAINTENANCE_STATE                  ((uint8_t)0x03U)
-#define OIL_COMPANY_STATE                  ((uint8_t)0x04U)
+#define INPUT_STATE                        ((uint8_t)0x00U)
+#define USERCODE_STATE                     ((uint8_t)0x01U)
+#define READING_STATE                      ((uint8_t)0x02U)
 #define UNKNOWN_STATE                      ((uint8_t)0x05U)
 /* State for printer setting */
 #define PRINTER_SETTING_STATE              ((uint8_t)0x01U)
@@ -155,10 +165,10 @@ static void ScanKeypad_DisplayLcdCharacter_Task(void *argument);
 static void CommandHandler_Task(void *argument);
 static void Main_Preset_Task(void *argument);
 
-static void HexDataToString(uint8_t *pData,uint8_t DataLength, uint8_t *pString);
+static uint8_t HexDataToString(uint8_t *pData,uint8_t DataLength, uint8_t *pString);
 static void LcdSegmentProcess(uint8_t opcode,uint8_t* pData);
 static void LcdCharacterProcess(uint8_t opcode,uint8_t* pData);
-static uint8_t SpecialKeyCheck(Keypad_Button_Type *PreviousKey,Keypad_Button_Type CurrentKey, uint8_t *PushTime);
+static uint8_t SpecialKeyCheck(KeypadStatus_t *KeypadStatus);
 static uint8_t CheckSum(uint8_t* pData, uint8_t Length);
 
 Std_Return_Type extract_command(command_t *pCmd, uint8_t *NeedToRespond, uint32_t timeout);
@@ -170,13 +180,47 @@ void Timer2_Callback (void *arg);
 *                                         LOCAL FUNCTIONS
 ==================================================================================================*/
 /***************************** logic function *************************************/
-static void HexDataToString(uint8_t *pData,uint8_t DataLength, uint8_t *pString)
+static uint8_t HexDataToString(uint8_t *pData,uint8_t DataLength, uint8_t *pString)
 {
-    uint8_t i=0;
-    for(i=0;i<DataLength;i++)
+    uint8_t i,j,NumberOfDigit;
+    i=j=NumberOfDigit=0;
+    uint8_t StartOfNum = 1;
+    /*remove n digits 0 from the left of number*/
+//    for(i=1;i<8;i++)
+//    {
+//        if( i%2 == 0 )
+//        {
+//            if((pData[i/2] >> 4) != 0)
+//            {
+//                StartOfNum = 1;
+//                break;
+//            }
+//        }else
+//        {
+//            if((pData[i]&0xf) != 0)
+//            {
+//                StartOfNum = 1;
+//                break;
+//            }
+//        }
+//    }
+    if(StartOfNum == 1)
     {
-        sprintf((char*)pString,"%d%d",(pData[i]>>4),(pData[i]&0xf));
+        for(i=1;i<8;i++)
+        {
+            if(i%2 == 0)
+            {
+                pString[j] = (pData[i/2] >> 4)+0x30;
+                j++;
+            }else
+            {
+                pString[j] = (pData[i/2] & 0xf)+0x30;
+                j++;
+            }
+        }
+        NumberOfDigit = j;
     }
+    return NumberOfDigit;
 }
 
 static uint8_t CheckSum(uint8_t* pData, uint8_t Length)
@@ -289,7 +333,6 @@ Std_Return_Type extract_command(command_t *pCmd, uint8_t *NeedToRespond, uint32_
  	RS485_Wait_For_Message(Rxbuffer,&length,timeout);
     
     // ACK frame or POL frame
-    // Start Delimiter(1Byte) | Slave address(1Byte) | 05 or 06 (1Byte)  | End delimiter(1Byte)
     if((uint8_t)0x1 == length)
     {
         pCmd->Address = 0xff;
@@ -324,7 +367,7 @@ Std_Return_Type extract_command(command_t *pCmd, uint8_t *NeedToRespond, uint32_
                 
                 if((gMainAddress == Rxbuffer[2]) || (gSubAddress == Rxbuffer[2]) || (gSubAddress_Coressponding == Rxbuffer[2]))
                 {
-                    if(Rxbuffer[length - 1] == CheckSum(&Rxbuffer[1],length - 2))
+                    if(Rxbuffer[length - 1] == CheckSum(&Rxbuffer[2],length - 3))
                     {
                         pCmd->Address = Rxbuffer[2];
                         pCmd->OpCode = Rxbuffer[3];
@@ -394,29 +437,36 @@ static void LcdSegmentDisplaySetEvent(void)
 static void LcdSegmentProcess(uint8_t opcode,uint8_t* pData)
 {
     uint8_t LcdSegmentBuffer[8];
+    uint8_t DigitNumbers = 0;
     switch(opcode) 
     {
         /*Control Byte : Zero-supress | Sign(dot or comma) */
         case 0x90:
             /* Ctr1(2B) | Row 1(4B) |Ctr1(2B) | Row 2(4B) |Ctr1(2B) | Row 3(4B) */
-            HexDataToString(&pData[2],4,LcdSegmentBuffer);
-            Lcd_Segment_Put_Data(LcdSegmentBuffer,1,0);
-            HexDataToString(&pData[8],4,LcdSegmentBuffer);
-            Lcd_Segment_Put_Data(LcdSegmentBuffer,2,0);
-            HexDataToString(&pData[14],4,LcdSegmentBuffer);
-            Lcd_Segment_Put_Data(LcdSegmentBuffer,2,0);
+            Lcd_Segment_Clear_Line(1);
+            Lcd_Segment_Clear_Line(2);
+            Lcd_Segment_Clear_Line(3);
+            DigitNumbers = HexDataToString(&pData[6],4,LcdSegmentBuffer);
+            Lcd_Segment_Put_Data(LcdSegmentBuffer,DigitNumbers,0,0);
+            DigitNumbers = HexDataToString(&pData[12],4,LcdSegmentBuffer);
+            Lcd_Segment_Put_Data(LcdSegmentBuffer,DigitNumbers,1,0);
+            DigitNumbers = HexDataToString(&pData[18],4,LcdSegmentBuffer);
+            Lcd_Segment_Put_Data(LcdSegmentBuffer,DigitNumbers,2,0);
             break;
         case 0x91:
+            Lcd_Segment_Clear_Line(1);
+            Lcd_Segment_Clear_Line(2);
             /* Ctr1(2B) | Row 1(4B) |Ctr1(2B) | Row 2(4B) */
-            HexDataToString(&pData[2],4,LcdSegmentBuffer);
-            Lcd_Segment_Put_Data(LcdSegmentBuffer,1,0);
-            HexDataToString(&pData[8],4,LcdSegmentBuffer);
-            Lcd_Segment_Put_Data(LcdSegmentBuffer,2,0);
+            DigitNumbers = HexDataToString(&pData[6],4,LcdSegmentBuffer);
+            Lcd_Segment_Put_Data(LcdSegmentBuffer,DigitNumbers,1,0);
+            DigitNumbers = HexDataToString(&pData[12],4,LcdSegmentBuffer);
+            Lcd_Segment_Put_Data(LcdSegmentBuffer,DigitNumbers,2,0);
             break;
         case 0x92:
+            Lcd_Segment_Clear_Line(3);
             /* Ctr1(2B) | Row 3(4B) */
-            HexDataToString(&pData[2],4,LcdSegmentBuffer);
-            Lcd_Segment_Put_Data(LcdSegmentBuffer,3,0);
+            DigitNumbers = HexDataToString(&pData[6],4,LcdSegmentBuffer);
+            Lcd_Segment_Put_Data(LcdSegmentBuffer,DigitNumbers,3,0);
             break;
     }
     LcdSegmentDisplaySetEvent();
@@ -461,129 +511,98 @@ static void LcdCharacterProcess(uint8_t opcode,uint8_t* pData)
 /***************************** Function to handle input data from keypad *************************************/
 const uint8_t Password1[] = {KEYPAD_ENTER,KEYPAD_ENTER,KEYPAD_CLEAR,KEYPAD_ENTER,KEYPAD_CLEAR};
 const uint8_t Password2[] = {KEYPAD_CLEAR,KEYPAD_CLEAR,KEYPAD_CLEAR};
-const uint8_t Password3[] = {KEYPAD_ENTER,KEYPAD_CLEAR,KEYPAD_CLEAR,KEYPAD_ENTER,KEYPAD_CLEAR};
+const uint8_t Password3[] = {KEYPAD_ENTER,KEYPAD_ENTER,KEYPAD_ENTER,KEYPAD_ENTER,KEYPAD_ENTER};
 #define NO_PASSWORD_CHECK       0
 #define FIRST_PASSWORD_CHECK    1
 #define SECOND_PASSWORD_CHECK   2
 #define THIRD_PASSWORD_CHECK    3
+#define PASSWORD_CHECKING       4
 
 #define NORMAL_KEY              0
 #define SPECIAL_KEY             1
-#define PASS_CODE_1             2
-#define PASS_CODE_2             3
-#define PASS_CODE_3             4
+#define UNKNOWN_KEY             2
 uint8_t Password_check = NO_PASSWORD_CHECK;
-static uint8_t SpecialKeyCheck(Keypad_Button_Type *PreviousKey,Keypad_Button_Type CurrentKey, uint8_t *PushTime)
+
+static uint8_t SpecialKeyCheck(KeypadStatus_t *KeypadStatus)
 {
     uint8_t RetValue = SPECIAL_KEY;
-    if(CurrentKey == KEYPAD_FORWARD)
+    if(KeypadStatus->CurrentStatus == KEYPAD_UNKNOWN)
     {
-        if(PRINTER_SETTING == gCurrentState)
-            Lcd_Move_Cursor_Right();
-    }else if(CurrentKey == KEYPAD_BACKWARD)
-    {
-        if(PRINTER_SETTING == gCurrentState)
-            Lcd_Move_Cursor_Left();
-    }else if(CurrentKey == KEYPAD_FONT)
-    {
-        if(PRINTER_SETTING == gCurrentState)
-            Keypad_Change_Font();
-    }else if(CurrentKey == KEYPAD_SPACE)
-    {
-        if(PRINTER_SETTING == gCurrentState)
-            LcdCharacter_PutString(LCD_NEXT_POSITION,LCD_NEXT_POSITION,(uint8_t*)" ",0);
-    }else if(CurrentKey == KEYPAD_CLEAR)
-    {
-        if(*PushTime == 0)
-            Password_check = SECOND_PASSWORD_CHECK;
-        if(PRINTER_SETTING == gCurrentState)
-            Lcd_Clear_Character();
-    }else if(CurrentKey == KEYPAD_ENTER)
-    {
-        if(*PushTime == 0)
-            Password_check = FIRST_PASSWORD_CHECK;
-        if(PRINTER_SETTING == gCurrentState)
-            Lcd_Move_Cursor_Next_Line();
-    }else if(CurrentKey == KEYPAD_UNKNOWN)
-    {
-        *PushTime = 0;
-    }else if(CurrentKey == KEYPAD_LOSS)
-    {
-        //TO DO
-    }else
-    {
-        if(*PushTime == 0)
-            Password_check = THIRD_PASSWORD_CHECK;
-        if(PRINTER_SETTING == gCurrentState)
+        KeypadStatus->PushTime = 0;
+        RetValue = UNKNOWN_KEY;
+    }else{
+        if(KeypadStatus->CurrentStatus == KEYPAD_FORWARD)
         {
-            if(*PreviousKey == CurrentKey)
-            {
-                *PushTime = *PushTime + 1;
-            }else
-            {
-                *PushTime = 0;
+            if(PRINTER_SETTING == gCurrentState)
                 Lcd_Move_Cursor_Right();
+        }else if(KeypadStatus->CurrentStatus == KEYPAD_BACKWARD)
+        {
+            if(PRINTER_SETTING == gCurrentState)
+                Lcd_Move_Cursor_Left();
+        }else if(KeypadStatus->CurrentStatus == KEYPAD_FONT)
+        {
+            if(PRINTER_SETTING == gCurrentState)
+                Keypad_Change_Font();
+        }else if(KeypadStatus->CurrentStatus == KEYPAD_ENDLINE)
+        {
+            if(PRINTER_SETTING == gCurrentState)
+                Lcd_Move_Cursor_Next_Line();
+        }else if(KeypadStatus->CurrentStatus == KEYPAD_CLEAR)
+        {
+            if(PRINTER_SETTING == gCurrentState)
+                Lcd_Clear_Character();
+        }else if(KeypadStatus->CurrentStatus == KEYPAD_ENTER)
+        {
+            //TO DO
+        }else if(KeypadStatus->CurrentStatus == KEYPAD_LOSS)
+        {
+            //TO DO
+        }else
+        {
+            if(PRINTER_SETTING == gCurrentState)
+            {
+                if(KeypadStatus->PreviousStatus == KeypadStatus->CurrentStatus)
+                {
+                    KeypadStatus->PushTime = KeypadStatus->PushTime + 1;
+                }else
+                {
+                    KeypadStatus->PushTime = 0;
+                    Lcd_Move_Cursor_Right();
+                }
             }
+            RetValue = NORMAL_KEY;
         }
-        RetValue = NORMAL_KEY;
-    }
-    if(Password_check != NO_PASSWORD_CHECK)
-    {
-        if(Password_check == FIRST_PASSWORD_CHECK)
+        if(PRINTER_SETTING != gCurrentState)
         {
-            if(*PushTime < sizeof(Password1))
-            {
-                if(CurrentKey != Password1[*PushTime])
-                    Password_check = NO_PASSWORD_CHECK;
-                else
-                {
-                    if(*PushTime == (sizeof(Password1) - 1))
-                    {
-                        Password_check = NO_PASSWORD_CHECK;
-                        RetValue = PASS_CODE_1;
-                    }
-                }
-            }
-        }else if(Password_check == SECOND_PASSWORD_CHECK)
-        {
-            if(*PushTime < sizeof(Password2))
-            {
-                if(CurrentKey != Password2[*PushTime])
-                    Password_check = NO_PASSWORD_CHECK;
-                else
-                {
-                    if(*PushTime == (sizeof(Password2) - 1))
-                    {
-                        Password_check = NO_PASSWORD_CHECK;
-                        RetValue = PASS_CODE_2;
-                    }
-                }
-            }
-        }else if(Password_check == THIRD_PASSWORD_CHECK)
-        {
-            if(*PushTime < sizeof(Password3))
-            {
-                if(CurrentKey != Password3[*PushTime])
-                    Password_check = NO_PASSWORD_CHECK;
-                else
-                {
-                    if(*PushTime == (sizeof(Password3) - 1))
-                    {
-                        Password_check = NO_PASSWORD_CHECK;
-                        RetValue = PASS_CODE_3;
-                    }
-                }
-            }
+            KeypadStatus->PushTime = KeypadStatus->PushTime + 1;
         }
-        *PushTime = *PushTime + 1;
     }
-    *PreviousKey = CurrentKey;
+    KeypadStatus->PreviousStatus = KeypadStatus->CurrentStatus;
     return RetValue;
 }
 
-static void Password_Check(Keypad_Button_Type CurrentKey, uint8_t *PushTime, uint8_t PassCheckingStatus)
+static Std_Return_Type Password_Check(KeypadStatus_t *KeypadStatus,Password_t *Password)
 {
-    
+    Std_Return_Type RetValue = E_NOT_OK;
+    if(KeypadStatus->PushTime == 1)
+        Password->CheckingStatus = PASSWORD_CHECKING;
+    if(Password->CheckingStatus == PASSWORD_CHECKING)
+    {
+        if(KeypadStatus->PushTime <= Password->length)
+        {
+            if(KeypadStatus->CurrentStatus == (Password->pPasscode)[KeypadStatus->PushTime-1])
+            {
+                if(KeypadStatus->PushTime == Password->length)
+                {
+                    Password->CheckingStatus = NO_PASSWORD_CHECK;
+                    RetValue = E_OK;
+                }
+            }else{
+                Password->CheckingStatus = NO_PASSWORD_CHECK;
+            }
+        }
+    }
+    return RetValue;
 }
 
 /************************************ Task handler *******************************************/
@@ -681,7 +700,7 @@ static void CommandHandler_Task(void *argument)
 	while(1)
 	{
         /* Waitting for command from CPU */
-		retValue = extract_command(&cmd, &NeedToRespond,100);
+		retValue = extract_command(&cmd, &NeedToRespond,osWaitForever);
         if (E_OK == retValue)
         {
             Msg_number++;
@@ -734,18 +753,18 @@ static void CommandHandler_Task(void *argument)
                 case 0x80:
                 case 0x81:
                 case 0x82:
-                    LcdCharacterProcess(cmd.OpCode,cmd.pData);
                     FrameLength = Framing_data(DataFrame,NULL,0,ACK);
                     RS485_Transmit(DataFrame,FrameLength);
+                    LcdCharacterProcess(cmd.OpCode,cmd.pData);
                     LcdCharacter_PutString(1,0,(uint8_t*)"SELECT",0);
                     break;
                 /*Dislay segment Lcd hex type*/
                 case 0x90:
                 case 0x91:
                 case 0x92:
-                    LcdSegmentProcess(cmd.OpCode,cmd.pData);
                     FrameLength = Framing_data(DataFrame,NULL,0,ACK);
                     RS485_Transmit(DataFrame,FrameLength);
+                    LcdSegmentProcess(cmd.OpCode,cmd.pData);
                     LcdCharacter_PutString(1,0,(uint8_t*)"SELECT",0);
                     break;
             }
@@ -784,82 +803,127 @@ static void CommandHandler_Task(void *argument)
 }
 
 
+
+
 static void Main_Preset_Task(void *argument)
 {
-    uint8_t PushTime=0;
     uint8_t key[2] = "";
-    uint8_t SegmentKey[9]="";
+    uint8_t SegmentKey[14];
     uint8_t Checking = NORMAL_KEY;
     uint8_t i = 0;
-    uint8_t temp = 0;
-    Keypad_Button_Type PreviousKey,CurrentKey;
-    PreviousKey = CurrentKey = KEYPAD_UNKNOWN;
+    
     osStatus_t status;
-
     Lcd_Segment_Put_Indicator(INDICATOR_A1|INDICATOR_A3|INDICATOR_A4|INDICATOR_A5);
     LcdSegmentDisplaySetEvent();
+    
+    KeypadStatus_t KeypadStatus = {KEYPAD_UNKNOWN,KEYPAD_UNKNOWN,0};
+    Password_t passcheck_1 = {(uint8_t*)Password1, sizeof(Password1),NO_PASSWORD_CHECK};
+    Password_t passcheck_2 = {(uint8_t*)Password2, sizeof(Password2),NO_PASSWORD_CHECK};
+    Password_t passcheck_3 = {(uint8_t*)Password3, sizeof(Password3),NO_PASSWORD_CHECK};
+
     while(1)
     {
-        status = osMessageQueueGet(KeypadInputQueue_Id, &CurrentKey, NULL, osWaitForever);
+        status = osMessageQueueGet(KeypadInputQueue_Id, &(KeypadStatus.CurrentStatus), NULL, osWaitForever);
         if(status == osOK)
         {
-            Checking = SpecialKeyCheck(&PreviousKey,CurrentKey,&PushTime);
+            Checking = SpecialKeyCheck(&KeypadStatus);
             switch(gCurrentState)
             {
                 case SYSTEM_PRESET:
                 {
-                    if(Checking == PASS_CODE_1)
+                    if(E_OK == Password_Check(&KeypadStatus,&passcheck_1))
                     {
-                        Lcd_Segment_Put_Data((uint8_t*)"code",2,0);
+                        PutCommandToBuffer(0xA0,(uint8_t*)"XXCXC",5);
+                        Lcd_Segment_Put_Data((uint8_t*)"code",4,2,0);
                         LcdSegmentDisplaySetEvent();
                         gCurrentState = SYSTEM_SETTING;
+                        gCurrentSubState = USERCODE_STATE;
+                    }
+                    if(E_OK == Password_Check(&KeypadStatus,&passcheck_3))
+                    {
+                        PutCommandToBuffer(0xA0,(uint8_t*)"XXXXX",5);
+                        Lcd_Segment_Put_Data((uint8_t*)"print",5,2,0);
+                        LcdSegmentDisplaySetEvent();
+                        gCurrentState = PRINTER_SETTING;
                     }
                     break;
                 }
                 case SYSTEM_SETTING:
                 {
-                    if(Checking == PASS_CODE_1)
+                    if(E_OK == Password_Check(&KeypadStatus,&passcheck_2))
                     {
-                        Lcd_Segment_Put_Data((uint8_t*)"code",1,0);
+                        PutCommandToBuffer(0xA0,(uint8_t*)"CCC",3);
+                        Lcd_Segment_Put_Data((uint8_t*)"00     ",7,2,0);
                         LcdSegmentDisplaySetEvent();
-                    }else if(Checking == PASS_CODE_2)
+                        gCurrentSubState = INPUT_STATE;
+                        
+                    }else if(Checking != UNKNOWN_KEY)
                     {
-                        Lcd_Segment_Put_Data((uint8_t*)"busy",1,0);
-                        LcdSegmentDisplaySetEvent();
-                    }else if(Checking == PASS_CODE_3)
-                    {
-                        Lcd_Segment_Put_Data((uint8_t*)"User",1,0);
-                        LcdSegmentDisplaySetEvent();
-                    }else if(Checking == NORMAL_KEY)
-                    {
-                        key[0] = Keypad_Mapping_Printer(CurrentKey,0);
-                        /*Push previous key*/
-                        //PutCommandToBuffer(0xA1,(uint8_t*)&key,1);
-                        sprintf((char*)SegmentKey,"%s%c",SegmentKey,key[0]);
-                        temp =  (CurrentKey % 4) | ((CurrentKey / 4) << 4) | 0x80;
-                        PutCommandToBuffer(0xA0,(uint8_t*)&temp,1);
-                        //Send_Data_Frame(0xA1,&key[0],1);
-                        LcdSegmentDisplaySetEvent();
-                        i++;
-                        if(i == 7)
+                        key[0] = Keypad_Mapping_Printer(KeypadStatus.CurrentStatus,0);
+                        if(Checking == NORMAL_KEY)
                         {
-                            i=0;
-                            sprintf((char*)SegmentKey,"%c",key[0]);
+                            
+                            /*Push previous key*/
+                            //PutCommandToBuffer(0xA1,(uint8_t*)&key,1);
+                            if(gCurrentSubState == USERCODE_STATE)
+                            {
+                                SegmentKey[i]=key[0];
+                                if(i < 14)
+                                {
+                                    SegmentKey[i]=key[0];
+                                    if(i >= 7)
+                                    {
+                                        Lcd_Segment_Put_Data((uint8_t*)"-",1,0,i - 7);
+                                    }else
+                                    {
+                                        Lcd_Segment_Put_Data((uint8_t*)"-",1,1,i);
+                                    }
+                                    i++;
+                                }
+                                LcdSegmentDisplaySetEvent();
+                            }else if(gCurrentSubState == INPUT_STATE)
+                            {
+                                if(i < 14)
+                                {
+                                    SegmentKey[i]=key[0];
+                                    i++;
+                                    if(i >= 7)
+                                    {
+                                        Lcd_Segment_Put_Data((uint8_t*)SegmentKey,i-7,0,0);
+                                        Lcd_Segment_Put_Data((uint8_t*)&SegmentKey[i-7],7,1,0);
+                                    }else
+                                    {
+                                        Lcd_Segment_Put_Data((uint8_t*)SegmentKey,i,1,0);
+                                    }
+                                }
+                                LcdSegmentDisplaySetEvent();
+                            }
+                        }else if(Checking == SPECIAL_KEY)
+                        {
+                            if((KeypadStatus.CurrentStatus == KEYPAD_ENTER) || (KeypadStatus.CurrentStatus == KEYPAD_CLEAR))
+                            {
+                                if((KeypadStatus.CurrentStatus == KEYPAD_ENTER) && ( i != 0 ))
+                                {
+                                    PutCommandToBuffer(0xA0,(uint8_t*)SegmentKey,i);
+                                    Lcd_Segment_Clear_Line(0x02);
+                                    Lcd_Segment_Put_Data((uint8_t*)SegmentKey,i,2,0);
+                                }
+                                sprintf((char*)SegmentKey,"");
+                                Lcd_Segment_Put_Data((uint8_t*)"       ",7,0,0);
+                                Lcd_Segment_Put_Data((uint8_t*)"       ",7,1,0);
+                                LcdSegmentDisplaySetEvent();
+                                i=0;
+                            }
                         }
-                        Lcd_Segment_Put_Data((uint8_t*)SegmentKey,0,0);
-                        key[1]='\0';
-                    }else if(Checking == SPECIAL_KEY)
-                    {
-                        temp = CurrentKey | 0x80;
-                        PutCommandToBuffer(0xA0,(uint8_t*)&temp,1);
                     }
+                   
                     break;
                 }
                 case PRINTER_SETTING:
                 {
                     if(Checking == NORMAL_KEY)
                     {
-                        key[0] = Keypad_Mapping_Printer(CurrentKey,PushTime);
+                        key[0] = Keypad_Mapping_Printer(KeypadStatus.CurrentStatus,KeypadStatus.PushTime);
                         key[1]='\0';
                         LcdCharacter_PutString(LCD_CURRENT_POSITION,LCD_CURRENT_POSITION,key,0);
                     }

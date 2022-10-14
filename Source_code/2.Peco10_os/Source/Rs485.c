@@ -188,7 +188,7 @@ void RS485_SwTimer_Callback(void *arg)
         gLoopBackStatus          = 0;
         gRxBufferInfo.head       = gRxBufferPreviousHead;
         gDurringTransmitTime     = 0;
-		/* Release the DE pin to disable transmiter block*/
+        /* Release the DE pin to disable transmiter block*/
         RS485_TRANSMIT_DISABLE();
 	}
 	else
@@ -208,7 +208,6 @@ void RS485_SwTimer_Callback(void *arg)
 
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
 {
-    
     //RS485_TRANSMIT_DISABLE();
 }
 

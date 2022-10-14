@@ -250,6 +250,9 @@ void Lcd_Clear(void)
     * Check page num24 of datasheet
     */
     mdelay(2);
+    gDisplayPosition = 0;
+    Current_Cursor_Posistion.col = 0;
+    Current_Cursor_Posistion.line = 0;
 }
 
 /* if Line/col equal by 0xff print at current posistion*/

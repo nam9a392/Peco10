@@ -11,22 +11,22 @@
 /**
  * @brief Display data table for number in even position
  */
-static const uint8_t DisplayDataFont1[31U] = 
+static const uint8_t DisplayDataFont1[32U] = 
 {
     0xAFU,   /* 0 */        0xA0U,   /* 1 */        0xCBU,   /* 2 */        0xE9U,   /* 3 */
     0xE4U,   /* 4 */        0x6DU,   /* 5 */        0x6FU,   /* 6 */        0xA8U,   /* 7 */
     0xEFU,   /* 8 */        0xEDU,   /* 9 */        0x67U,   /* b */        0xA7U,   /* U */
     0x6DU,   /* S */        0xE5U,   /* Y */        0x0FU,   /* C */        0x63U,   /* o */
     0xE3U,   /* d */        0x4FU,   /* E */        0x00U,   /* blank */    0x40U,   /* minus */
-    0x01U,   /* _ */        0xEEU,   /* A */        0x07U,   /* L */        0xECU,   /* P */
+    0x01U,   /* _ */        0xEEU,   /* A */        0x07U,   /* L */        0xCEU,   /* P */
     0x4EU,   /* F */        0x11U,   /* COMMA */    0x10U,   /* DOT */      0xE6U,   /* X */
-    0x06U,   /* I */        0x23,    /* u */        0x0E     /* r */
+    0x20U,   /* I */        0x62,    /* n */        0x42U,   /* r */        0xE0U    /* T */
 };
 
 /**
  * @brief Display data table for number in odd position
  */
-static const uint8_t DisplayDataFont2[31U] = 
+static const uint8_t DisplayDataFont2[32U] = 
 {
     0xFAU,   /* 0 */        0x60U,   /* 1 */        0xD6U,   /* 2 */        0xF4U,   /* 3 */
     0x6CU,   /* 4 */        0xBCU,   /* 5 */        0xBEU,   /* 6 */        0xE0U,   /* 7 */
@@ -35,7 +35,7 @@ static const uint8_t DisplayDataFont2[31U] =
     0x76U,   /* d */        0x9EU,   /* E */        0x00U,   /* blank */    0x04U,   /* minus */
     0x10U,   /* _ */        0xEEU,   /* A */        0x16U,   /* L */        0xCEU,   /* P */
     0x8EU,   /* F */        0x30U,   /* COMMA */    0x20U,   /* DOT */      0x6EU,   /* X */
-    0x0AU,   /* I */        0x36,    /* u */        0x8A     /* r */
+    0x20U,   /* I */        0x26,    /* n */        0x06,    /* r */        0x64U    /* T */
 };
 
 /* Lcd device code number */
@@ -102,7 +102,7 @@ static const uint8_t ControlData3[4U] =
 *                                  GLOBAL VARIABLE DECLARATIONS
 ==================================================================================================*/
 /* 14 characters Data display for each line (include comma or dot)*/
-//static uint8_t LcdSegmentDataDisplay[LCD_SEGMENT_ROWS][LCD_SEGMENT_COLS << 1U];
+static uint8_t LcdSegmentDataDisplay[LCD_SEGMENT_ROWS][LCD_SEGMENT_COLS];
 
 /* LCD display RAM */
 static uint8_t LcdDisplayRam[LCD_DISPLAY_RAM_SIZE];
@@ -150,10 +150,8 @@ static uint8_t FontPosition(uint8_t character)
             FontPos = 10U;
             break;
         case (uint8_t)'U':
-            FontPos = 11U;
-            break;
         case (uint8_t)'u':
-            FontPos = 29U;
+            FontPos = 11U;
             break;
         case (uint8_t)'S':
         case (uint8_t)'s':
@@ -218,9 +216,17 @@ static uint8_t FontPosition(uint8_t character)
         case (uint8_t)'I':
             FontPos = 28U;
             break;
+        case (uint8_t)'N':
+        case (uint8_t)'n':
+            FontPos = 29U;
+            break;
         case (uint8_t)'r':
         case (uint8_t)'R':
             FontPos = 30U;
+            break;
+        case (uint8_t)'T':
+        case (uint8_t)'t':
+            FontPos = 31U;
             break;
         default:
             FontPos = 18U;
@@ -420,11 +426,10 @@ void Lcd_Segment_Start_Display(void)
  *
  * @implement Lcd_Segment_Put_Data_Activity
  */
-void Lcd_Segment_Put_Data(uint8_t* pData, uint8_t line, uint8_t col)
+void Lcd_Segment_Put_Data(uint8_t* pData,uint8_t len, uint8_t line, uint8_t col)
 {
     uint8_t i=0;
     uint8_t j=0;
-    uint8_t len = strlen((char*)pData);
     if((line <= 2) && (col < 7))
     {
         /*clear line Lcd ram buffer data*/

@@ -112,15 +112,38 @@ uint8_t Keypad_Mapping(uint8_t pos)
 
 uint8_t Keypad_Mapping_Printer(uint8_t pos, uint8_t push_number)
 {
-    char character_pos;
-    if(gFontType == FONT_LOWERCASE)
+    uint8_t RetValue;
+    uint8_t character_pos;
+    if(pos == KEYPAD_ENTER)
     {
-        character_pos = (push_number) % strlen(KeyMap_Printer_Lowercase[pos]);
-        return KeyMap_Printer_Uppercase[pos][character_pos];
-    }else{
-        character_pos = (push_number) % strlen(KeyMap_Printer_Uppercase[pos]);
-        return KeyMap_Printer_Lowercase[pos][character_pos];
+        RetValue = 0xe0;
+    }else if(pos == KEYPAD_CLEAR)
+    {
+        RetValue = 0xe1;
+    }else if(pos == KEYPAD_FORWARD)
+    {
+        RetValue = 0xf0;
+    }else if(pos == KEYPAD_BACKWARD)
+    {
+        RetValue = 0xf1;
+    }else if(pos == KEYPAD_ENDLINE)
+    {
+        RetValue = 0xf2;
+    }else if(pos == KEYPAD_FONT)
+    {
+        RetValue = 0xf2;
+    }else
+    {
+        if(gFontType == FONT_LOWERCASE)
+        {
+            character_pos = (push_number) % strlen(KeyMap_Printer_Lowercase[pos]);
+            RetValue = KeyMap_Printer_Uppercase[pos][character_pos];
+        }else{
+            character_pos = (push_number) % strlen(KeyMap_Printer_Uppercase[pos]);
+            RetValue = KeyMap_Printer_Lowercase[pos][character_pos];
+        }
     }
+    return RetValue;
 }
 
 void Keypad_Change_Font(void)

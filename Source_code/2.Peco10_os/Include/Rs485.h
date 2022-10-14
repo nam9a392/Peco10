@@ -33,7 +33,7 @@
  * Number Time base interrupt periods in 1ms. Ex Time base irq occurs every 500us -> Period per ms is 2U 
  * This macro is only used when RS485_USING_TIMER_TO_DETECT_FRAME = STD_ON
  */
-#define RS485_SW_TIMER_PERIOD_PER_MILISECOND     (2U)
+#define RS485_SW_TIMER_PERIOD_PER_MILISECOND     (1U)
 
 #define RS485_BUFF_SIZE                          256U
 
