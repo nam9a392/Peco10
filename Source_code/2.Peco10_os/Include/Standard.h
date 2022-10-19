@@ -81,12 +81,6 @@ typedef enum
 	KEYPAD = 1U
 } Device_Type;
 
-typedef struct{
-    uint16_t tail;
-    uint16_t head;
-    uint16_t n_elem;
-}RingBufferManageQueue_t;
-
 typedef struct {
 	uint8_t * buffer;
 	uint8_t head;
