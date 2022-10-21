@@ -256,8 +256,9 @@ void Lcd_Clear(void)
 }
 
 /* if Line/col equal by 0xff print at current posistion*/
-void Lcd_Put_String(uint8_t line, uint8_t offset, uint8_t *pString)
+void Lcd_Put_String(uint8_t line, uint8_t offset, uint8_t *pString, uint16_t length)
 {
+    uint16_t i=0;
     if((line == LCD_CURRENT_POSITION) && (offset == LCD_CURRENT_POSITION))
     {
         if(Current_Cursor_Posistion.col != 0)
@@ -266,10 +267,10 @@ void Lcd_Put_String(uint8_t line, uint8_t offset, uint8_t *pString)
     {
         Lcd_Set_Cursor(line,offset);
     }
-    do
+    for (i=0 ; i<length ; i++)
     {
-        Lcd_Put_Char((uint8_t)*pString++);
-    }while(*pString != '\0');
+        Lcd_Put_Char((uint8_t)pString[i]);
+    }
 }
 
 void Lcd_Clear_Character(void)

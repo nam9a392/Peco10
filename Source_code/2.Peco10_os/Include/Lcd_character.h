@@ -106,7 +106,7 @@ void Lcd_Put_Char(uint8_t data);
  * @retval void
  *
  */
-void Lcd_Put_String(uint8_t line, uint8_t offset, uint8_t *pString);
+void Lcd_Put_String(uint8_t line, uint8_t offset, uint8_t *pString, uint16_t length);
  
  /*
  * @brief  This function uses to set the lcd cursor position
