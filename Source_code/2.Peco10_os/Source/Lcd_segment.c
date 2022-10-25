@@ -445,8 +445,9 @@ void Lcd_Segment_Put_Data(uint8_t* pData,uint8_t len, uint8_t line, uint8_t col)
                 }else{
                     i++;
                 }
-            }else{
-                Lcd_Segment_Prepare_Display_Ram((LCD_SEGMENT_COLS - col - i) ,line, ' ');
+            }
+            else{
+                //Lcd_Segment_Prepare_Display_Ram((LCD_SEGMENT_COLS - col - i) ,line, ' ');
                 i++;
             }
         }
@@ -455,8 +456,11 @@ void Lcd_Segment_Put_Data(uint8_t* pData,uint8_t len, uint8_t line, uint8_t col)
 
 void Lcd_Segment_Clear_Line(uint8_t line)
 {
-    /*clear line Lcd ram buffer data*/
-    memset(&LcdDisplayRam[19 - 9 * line], 0U, 9);
+    if(line < LCD_SEGMENT_ROWS)
+    {
+        /*clear line Lcd ram buffer data*/
+        memset(&LcdDisplayRam[19 - 9 * line], 0U, 9);
+    }
 }
 
 void Lcd_Segment_Put_Indicator(uint8_t Data)

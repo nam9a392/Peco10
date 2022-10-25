@@ -124,25 +124,40 @@ static uint8_t CheckSum(uint8_t* pData, uint8_t Length)
 static uint16_t Framing_data(uint8_t *Frame ,uint8_t *pData, uint16_t length ,uint8_t opCode)
 {
     uint8_t i = 0;
+    uint8_t j = 0;
     uint8_t FrameLength = 0;
 
-    if((pData == NULL) || (length == 0))
+    if((opCode == ACK) || (opCode == NACK) || (opCode == EOT))
     {
         Frame[0] = opCode;
         FrameLength = 1;
     }else
     {
-        Frame[0] = 0x02;
-        Frame[1] = gRs485_Address;
-        Frame[2] = opCode;
-        Frame[3] = 0x80 | length;
+        Frame[j] = 0x02;
+        j++;
+        Frame[j] = gRs485_Address;
+        j++;
+        Frame[j] = opCode;
+        j++;
+        if(opCode == 0xA1)
+        {
+            Frame[j] = 0; // reserve byte
+            j++;
+            Frame[j] = 0; // reserve byte
+            j++;
+            Frame[j] = 0x80 | length;
+            j++;
+        }
         for(i=0;i<length;i++)
         {
-            Frame[4+i] = pData[i];
+            Frame[j] = pData[i];
+            j++;
         }
-        Frame[4+length] = 0x03;
-        Frame[5+length] = CheckSum(&Frame[1],4 + length);
-        FrameLength = 6 + length;
+        Frame[j] = 0x03;
+        j++;
+        Frame[j] = CheckSum(&Frame[1],4 + length);
+        j++;
+        FrameLength = j;
     }
     return FrameLength;
 }
@@ -343,6 +358,7 @@ const uint8_t nack_Frame= NACK;
 const uint8_t eot_Frame = EOT;
 volatile uint8_t Proccess_State = RS485_IDLE_STATE;
 volatile uint8_t DataFrame[128] = {0};
+volatile uint8_t pCmd[128] = {0};
 volatile uint16_t FrameLength = 0;
 
 
@@ -350,9 +366,9 @@ volatile uint16_t FrameLength = 0;
 
 void RS485_SwTimer_Callback(void *arg)
 {
+    //uint8_t *pCmd;
     uint8_t OpCode;
     uint16_t Cmdlength;
-    uint8_t *pCmd;
     uint8_t CheckSumResult = 0;
     uint8_t CurRxBuffIndex = gRxBuffIndex;
     
@@ -366,7 +382,9 @@ void RS485_SwTimer_Callback(void *arg)
         gDurringTransmitTime     = 0;
         /* Release the DE pin to disable transmiter block*/
         RS485_TRANSMIT_DISABLE();
+#if (TEST_CODE == 1)
         PutCommandToBuffer((RingBufferManage_t*)&RxBufferInfor, 0xfc,0,0);
+#endif
 	}
 	else
 #endif
@@ -404,8 +422,11 @@ void RS485_SwTimer_Callback(void *arg)
                         flag = RS485_POLLING_FLAG;
                     }else
                     {
+#if (TEST_CODE == 1)
                         PutCommandToBuffer((RingBufferManage_t*)&RxBufferInfor, 0xff,0,0);
+#endif
                         RS485_Transmit((uint8_t*)&nack_Frame,1);
+                        
                     }
                 }
             }else if(gRxDataCount[CurRxBuffIndex] > 3)
@@ -426,26 +447,31 @@ void RS485_SwTimer_Callback(void *arg)
                            RS485_Transmit((uint8_t*)&ack_Frame,1);
                         }else
                         {
+#if (TEST_CODE == 1)
                            PutCommandToBuffer((RingBufferManage_t*)&RxBufferInfor, 0xff,0,0);
+#endif
                            RS485_Transmit((uint8_t*)&nack_Frame,1);
                         }
                     }
                 }
             }
-        }else
+        }
+#if (TEST_CODE == 1)
+        else
         {
             PutCommandToBuffer((RingBufferManage_t*)&RxBufferInfor, 0xfe,0,0);
         }
+#endif
         if(RS485_POLLING_STATE == Proccess_State)
         {
             if((RS485_POLLING_FLAG == flag) || (RS485_ACK_FLAG == flag))
             {
-                pCmd      = (uint8_t*)osMemoryPoolAlloc(PollingDataPool_ID,0U);
-                if(E_OK == GetCommandFromBuffer((RingBufferManage_t*)&TxBufferInfor,&OpCode,pCmd,&Cmdlength,0))
+                //pCmd      = (uint8_t*)osMemoryPoolAlloc(PollingDataPool_ID,0U);
+                if(E_OK == GetCommandFromBuffer((RingBufferManage_t*)&TxBufferInfor,&OpCode,(uint8_t*)pCmd,&Cmdlength,0))
                 {
                     FrameLength = Framing_data((uint8_t*)DataFrame,(uint8_t*)pCmd,Cmdlength,OpCode);
                     RS485_Transmit((uint8_t*)DataFrame,FrameLength);
-                    osMemoryPoolFree(PollingDataPool_ID,pCmd);
+                    //osMemoryPoolFree(PollingDataPool_ID,pCmd);
                 }else
                 {
                     Proccess_State = RS485_IDLE_STATE;
@@ -453,6 +479,8 @@ void RS485_SwTimer_Callback(void *arg)
                 }
             }else if(RS485_NACK_FLAG == flag)
             {
+                //TO DO
+                /* Only re-transmit few times */
                 RS485_Transmit((uint8_t*)DataFrame,FrameLength);
             }
         }

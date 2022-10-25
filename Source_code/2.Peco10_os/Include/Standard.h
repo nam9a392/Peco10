@@ -50,7 +50,7 @@
 #define Y_PORT                          GPIOA
 #define Y_PIN                           GPIO_PIN_12
 
-
+#define TEST_CODE       0
 #define configASSERT( x ) if( ( x ) == 0 ) {for( ;; ); }	
 /*==================================================================================================
                                            CONSTANTS
