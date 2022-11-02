@@ -21,9 +21,13 @@
 #define LCD_CMD_DON_CURON			0x0E
 /* Display on, cursor off, cursor not blink */
 #define LCD_CMD_DON_CUROFF			0x0C
+/* Display on, cursor on, cursor blink */
+#define LCD_CMD_DON_CURBLINK	    0x0F
 
 /* cursor move direction is increment */
 #define LCD_CMD_INCADD				0x06
+/* cursor move direction is increment */
+#define LCD_CMD_DECADD				0x04
 /* Clear entire display */
 #define LCD_CMD_DIS_CLEAR			0x01
 /* Return Cursor to home */
@@ -35,7 +39,11 @@
 #define LCD_SHIFT_LEFT              0
 
 #define LCD_CURRENT_POSITION        0xff
-#define LCD_NEXT_POSITION           0xfe
+#define LCD_PREVIOUS_POSITION       0xfe
+
+#define LCD_CHARACTER_LINES          2
+#define MAX_CHARACTER_OF_LINE       40
+#define MAX_CHARACTER_OF_DISPLAY    16
 /*==================================================================================================
                                            CONSTANTS
 ==================================================================================================*/
@@ -120,6 +128,9 @@ void Lcd_Set_Cursor(uint8_t line, uint8_t offset);
 void Lcd_Move_Cursor_Right(void);
 void Lcd_Move_Cursor_Left(void);
 void Lcd_Move_Cursor_Next_Line(void);
+void lcd_Read_Current_Position(uint8_t *line,uint8_t *offset);
+void Lcd_Cursor_Effect(uint8_t CursorEffect);
+uint8_t Lcd_Read_Data(uint8_t line, uint8_t offset, uint8_t *pData, uint8_t length);
 
 /**
  * @brief  This function uses to turn on the lcd cursor

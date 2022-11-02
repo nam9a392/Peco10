@@ -101,9 +101,6 @@ static const uint8_t ControlData3[4U] =
 /*==================================================================================================
 *                                  GLOBAL VARIABLE DECLARATIONS
 ==================================================================================================*/
-/* 14 characters Data display for each line (include comma or dot)*/
-static uint8_t LcdSegmentDataDisplay[LCD_SEGMENT_ROWS][LCD_SEGMENT_COLS];
-
 /* LCD display RAM */
 static uint8_t LcdDisplayRam[LCD_DISPLAY_RAM_SIZE];
 
@@ -264,7 +261,7 @@ static void Lcd_Segment_Prepare_Display_Ram(uint8_t col, uint8_t row, uint8_t Da
             {
                 LcdDisplayRam[20 - 9*row] = (LcdDisplayRam[20 - 9*row] & ~(DOT_COMMA_MASK_FONT2 >> 4)) | (DisplayDataFont2[FontPos] >> 4);
             }else{
-                LcdDisplayRam[21 - 9*row] = DisplayDataFont2[FontPos];
+                LcdDisplayRam[21 - 9*row] = (LcdDisplayRam[21 - 9*row] & 0x1) | DisplayDataFont2[FontPos];
             }
             break;
         case 5:
@@ -282,7 +279,7 @@ static void Lcd_Segment_Prepare_Display_Ram(uint8_t col, uint8_t row, uint8_t Da
                 LcdDisplayRam[23 - 9*row] = (LcdDisplayRam[23 - 9*row] & ~DOT_COMMA_MASK_FONT2) | DisplayDataFont2[FontPos];
             }else{
                 LcdDisplayRam[23 - 9*row] = (LcdDisplayRam[23 - 9*row] & 0xF0) | (DisplayDataFont2[FontPos] >> 4);
-                LcdDisplayRam[24 - 9*row] = (LcdDisplayRam[24 - 9*row] & 0xF) | (DisplayDataFont2[FontPos] << 4);
+                LcdDisplayRam[24 - 9*row] = (LcdDisplayRam[24 - 9*row] & 0x1F) | (DisplayDataFont2[FontPos] << 4);
             }
             break;
         case 3:
@@ -299,7 +296,7 @@ static void Lcd_Segment_Prepare_Display_Ram(uint8_t col, uint8_t row, uint8_t Da
             {
                 LcdDisplayRam[25 - 9*row] = (LcdDisplayRam[25 - 9*row] & ~(DOT_COMMA_MASK_FONT2 >> 4)) | (DisplayDataFont2[FontPos] >> 4);
             }else{
-                LcdDisplayRam[26 - 9*row] = DisplayDataFont2[FontPos];
+                LcdDisplayRam[26 - 9*row] = (LcdDisplayRam[26 - 9*row] & 0x1U) | DisplayDataFont2[FontPos];
             }
             break;
         case 1:

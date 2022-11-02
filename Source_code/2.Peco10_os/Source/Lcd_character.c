@@ -12,8 +12,8 @@
 /*==================================================================================================
                                        DEFINES AND MACROS
 ==================================================================================================*/
-#define MAX_CHARACTER_OF_LINE       40
-#define MAX_CHARACTER_OF_DISPLAY    16
+
+
 /*==================================================================================================
 *                                              ENUMS
 ==================================================================================================*/
@@ -36,9 +36,12 @@ typedef struct{
 /* Variable to store pin state of the 74HC595 */
 static volatile uint8_t Current_74HC595_Data_Out = 0U;
 /* Variable to store current position of cursor*/
-static volatile Lcd_Cursor_Pos_t Current_Cursor_Posistion = {0,0};
+//static volatile Lcd_Cursor_Pos_t gCurrent_Cursor_Posistion = {0,0};
+volatile Lcd_Cursor_Pos_t gCurrent_Cursor_Posistion = {0,0};
 /* Variable to store current position of display*/
-static uint8_t gDisplayPosition=0;
+//static volatile uint8_t gDisplayPosition=0;
+volatile uint8_t gDisplayPosition=0;
+volatile uint8_t LcdCharacterDataDisplay[LCD_CHARACTER_LINES*MAX_CHARACTER_OF_LINE] = {0};
 /*==================================================================================================
 *                                       FUNCTION PROTOTYPES
 ==================================================================================================*/
@@ -150,24 +153,36 @@ static void lcd_send_command(uint8_t cmd)
  * */
 void Lcd_Put_Char(uint8_t data)
 {
+    /* cache input data to read later*/
+    LcdCharacterDataDisplay[gCurrent_Cursor_Posistion.line*MAX_CHARACTER_OF_LINE + gCurrent_Cursor_Posistion.col] = data;
     /*shift display if cursor reach horizon*/
-    Current_Cursor_Posistion.col++;
-    if(Current_Cursor_Posistion.col > (gDisplayPosition + (MAX_CHARACTER_OF_DISPLAY - 1)))
-    {
-        /*Shift display to the left*/
-        Lcd_Display_Move_Left();
-    }
-    if(Current_Cursor_Posistion.col > (MAX_CHARACTER_OF_LINE-1))
-    {
-        Current_Cursor_Posistion.col = 0;
-        Current_Cursor_Posistion.line ^= 1;
-    } 
+    gCurrent_Cursor_Posistion.col++;
     /*RS = 1, for LCD user data*/
     Lcd_Instruction_Disable();
     /*Send 4 bit High of command*/
     Lcd_Write_4bits(data >> 4);
     /*Send 4 bit Low of command*/
     Lcd_Write_4bits(data & 0xF);
+    udelay(40);
+    //TO DO
+    if(gCurrent_Cursor_Posistion.col > (gDisplayPosition + (MAX_CHARACTER_OF_DISPLAY - 1)))
+    {
+        if(!((gCurrent_Cursor_Posistion.col > (MAX_CHARACTER_OF_LINE-1)) && gCurrent_Cursor_Posistion.line == 1))
+            /*Shift display to the left*/
+            Lcd_Display_Move_Left();
+    }
+    if(gCurrent_Cursor_Posistion.col > (MAX_CHARACTER_OF_LINE-1))
+    {
+        if(gCurrent_Cursor_Posistion.line == 0)
+        {
+            gCurrent_Cursor_Posistion.col = 0;
+            gCurrent_Cursor_Posistion.line ^= 1;
+        }else
+        {
+            gCurrent_Cursor_Posistion.col--;
+            Lcd_Set_Cursor(gCurrent_Cursor_Posistion.line,gCurrent_Cursor_Posistion.col);
+        }
+    }
 }
 
 static void Lcd_Display_Move_Right(void)
@@ -179,33 +194,37 @@ static void Lcd_Display_Move_Right(void)
         for(i=0;i<16;i++)
         {
             lcd_send_command(LCD_DISPLAY_SHIFT|LCD_SHIFT_RIGHT);
+            udelay(40);
         }
     }else{
         gDisplayPosition--;
         lcd_send_command(LCD_DISPLAY_SHIFT|LCD_SHIFT_RIGHT);
+        udelay(40);
     }
 }    
 
 static void Lcd_Display_Move_Left(void)
 {
     uint8_t i=0;
+    /*CHANGE*/
     if(gDisplayPosition  == (MAX_CHARACTER_OF_LINE - MAX_CHARACTER_OF_DISPLAY))
     {
         gDisplayPosition = 0;
         for(i=0;i<16;i++)
         {
             lcd_send_command(LCD_DISPLAY_SHIFT|LCD_SHIFT_LEFT);
+            udelay(40);
         }
     }else{
         gDisplayPosition++;
         lcd_send_command(LCD_DISPLAY_SHIFT|LCD_SHIFT_LEFT);
+        udelay(40);
     }
 }  
 
 static void Lcd_Return_Home(void)
 {
-    gDisplayPosition--;
-    Lcd_Display_Move_Right();
+    gDisplayPosition = 0;
     lcd_send_command(LCD_CMD_DIS_RETURN_HOME);
 }
 
@@ -241,18 +260,29 @@ void Lcd_Init_4bits_Mode(void)
     //entry mode set
     lcd_send_command(LCD_CMD_INCADD);
     udelay(40);
+
 }
 
 void Lcd_Clear(void)
 {
+    uint8_t row,col;
+    row=col=0;
+    for(row=0;row<LCD_CHARACTER_LINES;row++)
+    {
+        for(col=0;col<MAX_CHARACTER_OF_LINE;col++)
+        {
+            LcdCharacterDataDisplay[row*MAX_CHARACTER_OF_LINE + col] = ' ';
+        }
+    }
+    
     lcd_send_command(LCD_CMD_DIS_CLEAR);
     /*delay more than 1.52ms for command process 
     * Check page num24 of datasheet
     */
     mdelay(2);
     gDisplayPosition = 0;
-    Current_Cursor_Posistion.col = 0;
-    Current_Cursor_Posistion.line = 0;
+    gCurrent_Cursor_Posistion.col = 0;
+    gCurrent_Cursor_Posistion.line = 0;
 }
 
 /* if Line/col equal by 0xff print at current posistion*/
@@ -261,16 +291,67 @@ void Lcd_Put_String(uint8_t line, uint8_t offset, uint8_t *pString, uint16_t len
     uint16_t i=0;
     if((line == LCD_CURRENT_POSITION) && (offset == LCD_CURRENT_POSITION))
     {
-        if(Current_Cursor_Posistion.col != 0)
-            Lcd_Move_Cursor_Left();
-    }else if((line != LCD_NEXT_POSITION) && (offset != LCD_NEXT_POSITION))
+        /*CHANGE*/
+        ;
+    }else if((line == LCD_PREVIOUS_POSITION) && (offset == LCD_PREVIOUS_POSITION))
     {
+        ;
+    }else
+    {
+        gCurrent_Cursor_Posistion.col = offset;
+        gCurrent_Cursor_Posistion.line = line;
         Lcd_Set_Cursor(line,offset);
     }
     for (i=0 ; i<length ; i++)
     {
+        if(((line == LCD_PREVIOUS_POSITION) && (offset == LCD_PREVIOUS_POSITION)) 
+            && (LcdCharacterDataDisplay[gCurrent_Cursor_Posistion.line*MAX_CHARACTER_OF_LINE + gCurrent_Cursor_Posistion.col] == pString[0]))
+        {
+            Lcd_Move_Cursor_Left();
+        }
         Lcd_Put_Char((uint8_t)pString[i]);
+        if((line == LCD_PREVIOUS_POSITION) && (offset == LCD_PREVIOUS_POSITION))
+        {
+            Lcd_Move_Cursor_Left();
+        }
     }
+}
+
+void lcd_Read_Current_Position(uint8_t *line,uint8_t *offset)
+{
+    *line   = gCurrent_Cursor_Posistion.line;
+    *offset = gCurrent_Cursor_Posistion.col;
+}
+
+uint8_t Lcd_Read_Data(uint8_t line, uint8_t offset, uint8_t *pData, uint8_t length)
+{
+    uint8_t temp,count;
+    temp = count = 0;
+    count = length;
+    if((line == LCD_CURRENT_POSITION) && (offset == LCD_CURRENT_POSITION))
+    {
+        line   = gCurrent_Cursor_Posistion.line;
+        offset = gCurrent_Cursor_Posistion.col;
+    }
+    temp  = line*MAX_CHARACTER_OF_LINE + offset + length;
+    if(temp > (LCD_CHARACTER_LINES*MAX_CHARACTER_OF_LINE - 1))
+    {
+        temp = LCD_CHARACTER_LINES*MAX_CHARACTER_OF_LINE - 1;
+        count = LCD_CHARACTER_LINES*MAX_CHARACTER_OF_LINE - (line*MAX_CHARACTER_OF_LINE + offset);
+    }
+    do
+    {
+        if(LcdCharacterDataDisplay[temp] == ' ')
+        {
+            temp--;
+            count --;
+        }else
+        {
+            break;
+        }
+    }while(temp>=line*MAX_CHARACTER_OF_LINE + offset);
+    memcpy(pData,(uint8_t*)&LcdCharacterDataDisplay[line*MAX_CHARACTER_OF_LINE + offset],count);
+    return count;
 }
 
 void Lcd_Clear_Character(void)
@@ -282,55 +363,71 @@ void Lcd_Clear_Character(void)
 
 void Lcd_Move_Cursor_Right(void)
 {
-    Current_Cursor_Posistion.col++;
+    gCurrent_Cursor_Posistion.col++;
     /*shift display to the left if cursor reach right horizon*/
-    if(Current_Cursor_Posistion.col > (gDisplayPosition + (MAX_CHARACTER_OF_DISPLAY - 1)))
+    if(gCurrent_Cursor_Posistion.col > (gDisplayPosition + (MAX_CHARACTER_OF_DISPLAY - 1)))
     {
         /*Shift display to the left*/
         Lcd_Display_Move_Left();
     }
-    if(Current_Cursor_Posistion.col > (MAX_CHARACTER_OF_LINE - 1))
+    if(gCurrent_Cursor_Posistion.col > (MAX_CHARACTER_OF_LINE - 1))
     {
-        Current_Cursor_Posistion.col = 0;
-        Current_Cursor_Posistion.line ^= 1;
+        gCurrent_Cursor_Posistion.col = 0;
+        gCurrent_Cursor_Posistion.line ^= 1;
     }
     /*shift cursor position to the right*/    
     lcd_send_command(LCD_CURSOR_MOVE|LCD_SHIFT_RIGHT);
+    udelay(40);
 }
 
 void Lcd_Move_Cursor_Left(void)
 {
-    if((Current_Cursor_Posistion.col != 0) || (Current_Cursor_Posistion.line != 0))
+    if((gCurrent_Cursor_Posistion.col != 0) || (gCurrent_Cursor_Posistion.line != 0))
     {
         /*shift display to the right if cursor reach left horizon*/
-        if(Current_Cursor_Posistion.col == 0)
+        if(gCurrent_Cursor_Posistion.col == 0)
         {
-            Current_Cursor_Posistion.col = MAX_CHARACTER_OF_LINE - 1;
-            Current_Cursor_Posistion.line ^= 1;
+            gCurrent_Cursor_Posistion.col = MAX_CHARACTER_OF_LINE - 1;
+            gCurrent_Cursor_Posistion.line ^= 1;
+            //Lcd_Set_Cursor(gCurrent_Cursor_Posistion.line,gCurrent_Cursor_Posistion.col);
+            /*Shift display to the right*/
             Lcd_Display_Move_Right();
+            lcd_send_command(LCD_CURSOR_MOVE|LCD_SHIFT_LEFT);
+            udelay(40);
         }else
         {
-            Current_Cursor_Posistion.col--;
-            if(Current_Cursor_Posistion.col < gDisplayPosition)
+            gCurrent_Cursor_Posistion.col--;
+            if(gCurrent_Cursor_Posistion.col < gDisplayPosition)
             {
                 Lcd_Display_Move_Right();
             }
+             /*shift cursor position to the left*/    
+            lcd_send_command(LCD_CURSOR_MOVE|LCD_SHIFT_LEFT);
+            udelay(40);
         }
-        /*shift cursor position to the left*/    
-        lcd_send_command(LCD_CURSOR_MOVE|LCD_SHIFT_LEFT);
     }
 }
 
 void Lcd_Move_Cursor_Next_Line(void)
 {
-    Current_Cursor_Posistion.line ^= 1;
-    Lcd_Set_Cursor(Current_Cursor_Posistion.line,Current_Cursor_Posistion.col);
+    gCurrent_Cursor_Posistion.line ^= 1;
+    Lcd_Set_Cursor(gCurrent_Cursor_Posistion.line,gCurrent_Cursor_Posistion.col);
 }
 
 void Lcd_Set_Cursor(uint8_t line, uint8_t offset)
 {
-    Current_Cursor_Posistion.line = line;
-    Current_Cursor_Posistion.col  = offset;
+    while(offset < gDisplayPosition)
+    {
+        /*Shift display to the right*/
+        Lcd_Display_Move_Right();
+    }
+    while(offset > (gDisplayPosition + (MAX_CHARACTER_OF_DISPLAY - 1)))
+    {
+        /*Shift display to the left*/
+        Lcd_Display_Move_Left();
+    }
+    gCurrent_Cursor_Posistion.line = line;
+    gCurrent_Cursor_Posistion.col  = offset;
     switch(line)
     {
         case 0:
@@ -351,6 +448,25 @@ void Lcd_Set_Cursor(uint8_t line, uint8_t offset)
 void Lcd_Turn_On_Cursor(void)
 {
     lcd_send_command(LCD_CMD_DON_CURON);
+    /*delay more than 37us for command process 
+    * Check page num24 of datasheet
+    */
+    udelay(40);
+}
+
+void Lcd_Cursor_Effect(uint8_t CursorEffect)
+{
+    switch(CursorEffect)
+    {
+        case 0:
+            lcd_send_command(LCD_CMD_DON_CUROFF);
+        case 1:
+            lcd_send_command(LCD_CMD_DON_CURON);
+        case 2:
+            lcd_send_command(LCD_CMD_DON_CURBLINK);
+        default:
+            lcd_send_command(LCD_CMD_DON_CUROFF);
+    }
     /*delay more than 37us for command process 
     * Check page num24 of datasheet
     */

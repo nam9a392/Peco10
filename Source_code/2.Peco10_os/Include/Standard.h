@@ -81,14 +81,6 @@ typedef enum
 	KEYPAD = 1U
 } Device_Type;
 
-typedef struct {
-	uint8_t * buffer;
-	uint8_t head;
-	uint8_t tail;
-	uint8_t max; //of the buffer
-}circular_buf_t ;
-
-typedef circular_buf_t* cbuf_handle_t;
 /*==================================================================================================
 *                                  GLOBAL VARIABLE DECLARATIONS
 ==================================================================================================*/

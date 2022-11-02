@@ -55,12 +55,12 @@ osMessageQueueId_t      Rs485_ReceiveQueue_ID,
 osMemoryPoolId_t PollingDataPool_ID;
 
 /********************************** Ring buffer to manage Rs485 transmit/receive ****************************************/
-uint8_t RxBuffer[COMMAND_BUFFER_SIZE] = {0};
-uint8_t TxBuffer[COMMAND_BUFFER_SIZE] = {0};
+volatile uint8_t RxBuffer[COMMAND_BUFFER_SIZE] = {0};
+volatile uint8_t TxBuffer[COMMAND_BUFFER_SIZE] = {0};
 
 volatile RingBufferManage_t RxBufferInfor =
 {
-    .buff = RxBuffer,
+    .buff = (uint8_t*)RxBuffer,
     .size = COMMAND_BUFFER_SIZE,
     .head = 0,
     .tail = 0,
@@ -69,7 +69,7 @@ volatile RingBufferManage_t RxBufferInfor =
 
 volatile RingBufferManage_t TxBufferInfor =
 {
-    .buff = TxBuffer,
+    .buff = (uint8_t*)TxBuffer,
     .size = COMMAND_BUFFER_SIZE,
     .head = 0,
     .tail = 0,
@@ -133,30 +133,25 @@ static uint16_t Framing_data(uint8_t *Frame ,uint8_t *pData, uint16_t length ,ui
         FrameLength = 1;
     }else
     {
-        Frame[j] = 0x02;
-        j++;
-        Frame[j] = gRs485_Address;
-        j++;
-        Frame[j] = opCode;
-        j++;
+        Frame[j++] = 0x02;
+        Frame[j++] = gRs485_Address;
+        Frame[j++] = opCode;
         if(opCode == 0xA1)
         {
-            Frame[j] = 0; // reserve byte
-            j++;
-            Frame[j] = 0; // reserve byte
-            j++;
-            Frame[j] = 0x80 | length;
-            j++;
+            Frame[j++] = 0; // reserve byte
+            Frame[j++] = 0; // reserve byte
+            Frame[j++] = 0x80 | length;
+        }else if(opCode == 0xA2)
+        {
+            Frame[j++] = 0; // reserve byte
+            Frame[j++] = 0x80 | length;
         }
         for(i=0;i<length;i++)
         {
-            Frame[j] = pData[i];
-            j++;
+            Frame[j++] = pData[i];
         }
-        Frame[j] = 0x03;
-        j++;
-        Frame[j] = CheckSum(&Frame[1],4 + length);
-        j++;
+        Frame[j++] = 0x03;
+        Frame[j++] = CheckSum(&Frame[1],4 + length);
         FrameLength = j;
     }
     return FrameLength;
@@ -305,9 +300,15 @@ void RS485_Init(uint8_t DeviceAddress)
  */
 Std_Return_Type RS485_Prepare_To_Transmit(uint8_t OpCode ,uint8_t *pData ,uint16_t length)
 {
+    uint8_t *pFrame;
+    uint16_t FrameLength;
     Std_Return_Type eRetValue;
-    
-    eRetValue = PutCommandToBuffer((RingBufferManage_t*)&TxBufferInfor,OpCode,pData,length);
+    pFrame      = (uint8_t*)osMemoryPoolAlloc(PollingDataPool_ID,0U);
+    /*Framing data before pushing into buffer*/
+    FrameLength = Framing_data((uint8_t*)pFrame,(uint8_t*)pData,length,OpCode);
+    //eRetValue = PutCommandToBuffer((RingBufferManage_t*)&TxBufferInfor,OpCode,pData,length);
+    eRetValue = PutCommandToBuffer((RingBufferManage_t*)&TxBufferInfor,OpCode,pFrame,FrameLength);
+    osMemoryPoolFree(PollingDataPool_ID,pFrame);
     return eRetValue;
 }
 
@@ -357,9 +358,9 @@ const uint8_t ack_Frame = ACK;
 const uint8_t nack_Frame= NACK;
 const uint8_t eot_Frame = EOT;
 volatile uint8_t Proccess_State = RS485_IDLE_STATE;
-volatile uint8_t DataFrame[128] = {0};
-volatile uint8_t pCmd[128] = {0};
-volatile uint16_t FrameLength = 0;
+volatile uint8_t gDataFrame[128] = {0};
+//volatile uint8_t pCmd[128] = {0};
+volatile uint16_t gFrameLength = 0;
 
 
 #if(RS485_USING_TIMER_TO_DETECT_FRAME == STD_ON)
@@ -368,7 +369,7 @@ void RS485_SwTimer_Callback(void *arg)
 {
     //uint8_t *pCmd;
     uint8_t OpCode;
-    uint16_t Cmdlength;
+    //uint16_t Cmdlength;
     uint8_t CheckSumResult = 0;
     uint8_t CurRxBuffIndex = gRxBuffIndex;
     
@@ -467,10 +468,10 @@ void RS485_SwTimer_Callback(void *arg)
             if((RS485_POLLING_FLAG == flag) || (RS485_ACK_FLAG == flag))
             {
                 //pCmd      = (uint8_t*)osMemoryPoolAlloc(PollingDataPool_ID,0U);
-                if(E_OK == GetCommandFromBuffer((RingBufferManage_t*)&TxBufferInfor,&OpCode,(uint8_t*)pCmd,&Cmdlength,0))
+                if(E_OK == GetCommandFromBuffer((RingBufferManage_t*)&TxBufferInfor,&OpCode,(uint8_t*)gDataFrame,(uint16_t*)&gFrameLength,0))
                 {
-                    FrameLength = Framing_data((uint8_t*)DataFrame,(uint8_t*)pCmd,Cmdlength,OpCode);
-                    RS485_Transmit((uint8_t*)DataFrame,FrameLength);
+                    //gFrameLength = Framing_data((uint8_t*)gDataFrame,(uint8_t*)pCmd,Cmdlength,OpCode);
+                    RS485_Transmit((uint8_t*)gDataFrame,gFrameLength);
                     //osMemoryPoolFree(PollingDataPool_ID,pCmd);
                 }else
                 {
@@ -481,7 +482,7 @@ void RS485_SwTimer_Callback(void *arg)
             {
                 //TO DO
                 /* Only re-transmit few times */
-                RS485_Transmit((uint8_t*)DataFrame,FrameLength);
+                RS485_Transmit((uint8_t*)gDataFrame,gFrameLength);
             }
         }
         gRxDataCount[CurRxBuffIndex] = 0;
