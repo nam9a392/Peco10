@@ -24,6 +24,12 @@
 
 #define FONT_LOWERCASE              0
 #define FONT_UPPERCASE              1
+
+#define KEYPAD_SPECIAL_KEY_CHECK(x)   ((x == KEYPAD_ENTER) || (x == KEYPAD_CLEAR) || \
+                                        (x == KEYPAD_PRESET_1) || (x == KEYPAD_PRESET_2) || \
+                                        (x == KEYPAD_PRESET_3) || (x == KEYPAD_PRESET_4))
+
+
 /*==================================================================================================
 *                                              ENUMS
 ==================================================================================================*/
@@ -112,26 +118,16 @@ uint8_t Keypad_Mapping(uint8_t pos)
 
 uint8_t Keypad_Mapping_Printer(uint8_t pos, uint8_t push_number)
 {
-    uint8_t RetValue;
+    uint8_t RetValue = 0;
+    uint8_t len;
     uint8_t character_pos;
-    if(pos == KEYPAD_ENTER)
+    if((KEYPAD_UNKNOWN == pos)&&(KEYPAD_LOSS == pos))
     {
-        RetValue = 0xe0;
-    }else if(pos == KEYPAD_CLEAR)
+        ;
+    }
+    else if(KEYPAD_SPECIAL_KEY_CHECK(pos))
     {
-        RetValue = 0xe1;
-    }else if(pos == KEYPAD_FORWARD)
-    {
-        RetValue = 0xf0;
-    }else if(pos == KEYPAD_BACKWARD)
-    {
-        RetValue = 0xf1;
-    }else if(pos == KEYPAD_ENDLINE)
-    {
-        RetValue = 0xf2;
-    }else if(pos == KEYPAD_FONT)
-    {
-        RetValue = 0xf2;
+        RetValue = KeyMap[pos];
     }else
     {
         if(gFontType == FONT_LOWERCASE)

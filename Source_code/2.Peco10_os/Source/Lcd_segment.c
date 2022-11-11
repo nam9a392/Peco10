@@ -462,8 +462,22 @@ void Lcd_Segment_Clear_Line(uint8_t line)
 
 void Lcd_Segment_Put_Indicator(uint8_t Data)
 {
-    /* Copy indicator byte to display RAM */
-    LcdDisplayRam[0U] = Data & 0xF8U;
+    uint8_t A1,A2,A3,A4,A5;
+    A1=A2=A3=A4=A5=0;
+    A1 = (Data >> 0) & 0x1;
+    A2 = (Data >> 1) & 0x1;
+    A3 = (Data >> 2) & 0x1;
+    A4 = (Data >> 3) & 0x1;
+    A5 = (Data >> 4) & 0x1;
+    /* Copy indicator byte to display RAM
+    Input data format;
+     | Bit7 | Bit6 | Bit5 | Bit4 | Bit3 | Bit2 | Bit1 | Bit0 | 
+     |      Reserved      |  A5  |  A4  |  A3  |  A2  |  A1  |
+    Segment display ram format
+     | Bit7 | Bit6 | Bit5 | Bit4 | Bit3 | Bit2 | Bit1 | Bit0 | 
+     |  A2  |  A3  |  A4  |  A5  |  A1  |     Reserved       |
+    */
+    LcdDisplayRam[0U] = ((A1 << 3) | (A5 << 4) | (A4 << 5) | (A3 << 6) | (A2 << 7)) & 0xF8U;
     return; 
 }
 /*==================================================================================================

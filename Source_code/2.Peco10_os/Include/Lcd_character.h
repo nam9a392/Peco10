@@ -39,11 +39,15 @@
 #define LCD_SHIFT_LEFT              0
 
 #define LCD_CURRENT_POSITION        0xff
-#define LCD_PREVIOUS_POSITION       0xfe
+#define LCD_PRINT_CHARACTER         0xfe
 
 #define LCD_CHARACTER_LINES          2
 #define MAX_CHARACTER_OF_LINE       40
 #define MAX_CHARACTER_OF_DISPLAY    16
+
+#define LCD_CURSOR_OFF              0
+#define LCD_CURSOR_ON               1
+#define LCD_CURSOR_BLINK            2
 /*==================================================================================================
                                            CONSTANTS
 ==================================================================================================*/
@@ -129,8 +133,11 @@ void Lcd_Move_Cursor_Right(void);
 void Lcd_Move_Cursor_Left(void);
 void Lcd_Move_Cursor_Next_Line(void);
 void lcd_Read_Current_Position(uint8_t *line,uint8_t *offset);
-void Lcd_Cursor_Effect(uint8_t CursorEffect);
 uint8_t Lcd_Read_Data(uint8_t line, uint8_t offset, uint8_t *pData, uint8_t length);
+void Lcd_Cursor_Effect(uint8_t CursorEffect);
+void Lcd_DisplayShift_Turn_On(void);
+void Lcd_DisplayShift_Turn_Off(void);
+
 
 /**
  * @brief  This function uses to turn on the lcd cursor

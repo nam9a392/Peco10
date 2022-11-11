@@ -17,10 +17,16 @@
 #define LCD_SEGMENT_COLS                         (7U)
 #define LCD_SEGMENT_DIGITS                       (LCD_SEGMENT_ROWS*LCD_SEGMENT_COLS)
 
-#define INDICATOR_A1                             (0x8U)
-#define INDICATOR_A2                             (0x80U)
-#define INDICATOR_A3                             (0x40U)
-#define INDICATOR_A4                             (0x20U)
+//#define INDICATOR_A1                             (0x8U)
+//#define INDICATOR_A2                             (0x80U)
+//#define INDICATOR_A3                             (0x40U)
+//#define INDICATOR_A4                             (0x20U)
+//#define INDICATOR_A5                             (0x10U)
+
+#define INDICATOR_A1                             (0x1U)
+#define INDICATOR_A2                             (0x2U)
+#define INDICATOR_A3                             (0x4U)
+#define INDICATOR_A4                             (0x8U)
 #define INDICATOR_A5                             (0x10U)
 
 #define SCE_PIN                                 GPIO_PIN_14
