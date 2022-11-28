@@ -26,6 +26,7 @@ volatile uint32_t mult;
 uint8_t TM_DELAY_Initialized = 0;
 
 extern TIM_HandleTypeDef htim3;
+extern TIM_HandleTypeDef htim14;
 //extern void MX_TIM3_Init(void);
 
 /* Private structure */
@@ -247,10 +248,13 @@ TM_DELAY_Timer_t* TM_DELAY_TimerAutoReloadValue(TM_DELAY_Timer_t* Timer, uint32_
 }
 
 /* Timer IRQ Handler */
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
-{
-      if(htim == &htim3)
-        {
-              SoftTimer_Callback();
-        }
-}
+//void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+//{
+//    if(htim == &htim3)
+//    {
+//        SoftTimer_Callback();
+//    }
+//    if (htim->Instance == TIM14) {
+//        HAL_IncTick();
+//    }
+//}

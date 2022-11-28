@@ -55,7 +55,10 @@
 /*==================================================================================================
 *                                              ENUMS
 ==================================================================================================*/
-
+typedef enum{
+    NORMAL_MODE,
+    EXTENDED_MODE
+}Lcd_Display_Mode_t;
 /*==================================================================================================
 *                                  STRUCTURES AND OTHER TYPEDEFS
 ==================================================================================================*/
@@ -135,8 +138,8 @@ void Lcd_Move_Cursor_Next_Line(void);
 void lcd_Read_Current_Position(uint8_t *line,uint8_t *offset);
 uint8_t Lcd_Read_Data(uint8_t line, uint8_t offset, uint8_t *pData, uint8_t length);
 void Lcd_Cursor_Effect(uint8_t CursorEffect);
-void Lcd_DisplayShift_Turn_On(void);
-void Lcd_DisplayShift_Turn_Off(void);
+void Lcd_ShiftDisplay_Turn_On(void);
+void Lcd_ShiftDisplay_Turn_Off(void);
 
 
 /**

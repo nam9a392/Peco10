@@ -18,6 +18,22 @@
 #define COMMAND_BUFFER_SIZE                 128U
 #define RECEIVE_BUFFER_SIZE                 128U
 #define RECEIVE_BUFFER_NUMBER               2U
+
+#define RECEIVE_QUEUE_NUMBER                2
+#define TRANSMIT_QUEUE_NUMBER               2
+
+
+#define RS485_IDLE_FLAG         0
+#define RS485_SELLECT_FLAG      1
+#define RS485_ACK_FLAG          2
+#define RS485_NACK_FLAG         3
+#define RS485_POLLING_FLAG      4
+
+
+#define RS485_IDLE_STATE                    0
+#define RS485_POLLING_STATE                 1
+#define RS485_RECEPTION_STATE               2
+#define RS485_TRANSMITION_STATE             3
 /*==================================================================================================
 *                                              ENUMS
 ==================================================================================================*/
@@ -93,6 +109,13 @@ volatile uint8_t gRxData = 0;
 volatile uint8_t gRxDataCount[RECEIVE_BUFFER_NUMBER] = {0};
 volatile uint8_t gRxDataBuffer[RECEIVE_BUFFER_NUMBER][RECEIVE_BUFFER_SIZE]={0,0};
 volatile uint8_t gRxBuffIndex = 0;
+
+const uint8_t ack_Frame = ACK;
+const uint8_t nack_Frame= NACK;
+const uint8_t eot_Frame = EOT;
+volatile uint8_t Proccess_State = RS485_IDLE_STATE;
+volatile uint8_t gDataFrame[128] = {0};
+volatile uint16_t gFrameLength = 0;
 
 /*==================================================================================================
 *                                       FUNCTION PROTOTYPES
@@ -198,7 +221,7 @@ Std_Return_Type GetCommandFromBuffer(RingBufferManage_t *RingBuffer, uint8_t *Op
     Cmd_Queue_Obj_t GetCommandDataInfo;
     *length = 0;
     CmdStatus = osMessageQueueGet(RingBuffer->mq_id, &GetCommandDataInfo, NULL, timeout);
-    if(osOK == CmdStatus)
+    if(osOK == CmdStatus) 
     {
         if(GetCommandDataInfo.tail < GetCommandDataInfo.head)
         {
@@ -267,8 +290,8 @@ void RS485_Init(uint8_t DeviceAddress)
                                          NULL);
 #endif
     
-   Rs485_ReceiveQueue_ID    = osMessageQueueNew(2, sizeof(Cmd_Queue_Obj_t), NULL);
-   Rs485_TransmitQueue_ID   = osMessageQueueNew(2, sizeof(Cmd_Queue_Obj_t), NULL);
+   Rs485_ReceiveQueue_ID    = osMessageQueueNew(RECEIVE_QUEUE_NUMBER , sizeof(Cmd_Queue_Obj_t), NULL);
+   Rs485_TransmitQueue_ID   = osMessageQueueNew(TRANSMIT_QUEUE_NUMBER, sizeof(Cmd_Queue_Obj_t), NULL);
 
    RxBufferInfor.mq_id = Rs485_ReceiveQueue_ID;
    TxBufferInfor.mq_id = Rs485_TransmitQueue_ID;
@@ -301,14 +324,15 @@ void RS485_Init(uint8_t DeviceAddress)
 Std_Return_Type RS485_Prepare_To_Transmit(uint8_t OpCode ,uint8_t *pData ,uint16_t length)
 {
     uint8_t *pFrame;
-    uint16_t FrameLength;
-    Std_Return_Type eRetValue;
-    pFrame      = (uint8_t*)osMemoryPoolAlloc(PollingDataPool_ID,0U);
+    uint16_t FrameLength = 0;
+    Std_Return_Type eRetValue = E_NOT_OK;
+    
     /*Framing data before pushing into buffer*/
+    pFrame      = (uint8_t*)osMemoryPoolAlloc(PollingDataPool_ID,0U);
     FrameLength = Framing_data((uint8_t*)pFrame,(uint8_t*)pData,length,OpCode);
-    //eRetValue = PutCommandToBuffer((RingBufferManage_t*)&TxBufferInfor,OpCode,pData,length);
     eRetValue = PutCommandToBuffer((RingBufferManage_t*)&TxBufferInfor,OpCode,pFrame,FrameLength);
     osMemoryPoolFree(PollingDataPool_ID,pFrame);
+    
     return eRetValue;
 }
 
@@ -339,29 +363,10 @@ Std_Return_Type RS485_Wait_For_Message(uint8_t* Opcode, uint8_t* pData, uint16_t
 *                                         TASKS HANDLE FUNCTIONS
 ==================================================================================================*/
 
-#define RS485_IDLE_FLAG         0
-#define RS485_SELLECT_FLAG      1
-#define RS485_ACK_FLAG          2
-#define RS485_NACK_FLAG         3
-#define RS485_POLLING_FLAG      4
-
-
-#define RS485_IDLE_STATE                    0
-#define RS485_POLLING_STATE                 1
-#define RS485_RECEPTION_STATE               2
-#define RS485_TRANSMITION_STATE             3
 
 /*==================================================================================================
 *                                         HANDLER FUNCTIONS
 ==================================================================================================*/
-const uint8_t ack_Frame = ACK;
-const uint8_t nack_Frame= NACK;
-const uint8_t eot_Frame = EOT;
-volatile uint8_t Proccess_State = RS485_IDLE_STATE;
-volatile uint8_t gDataFrame[128] = {0};
-//volatile uint8_t pCmd[128] = {0};
-volatile uint16_t gFrameLength = 0;
-
 
 #if(RS485_USING_TIMER_TO_DETECT_FRAME == STD_ON)
 
@@ -400,11 +405,13 @@ void RS485_SwTimer_Callback(void *arg)
         if (gRxDataBuffer[CurRxBuffIndex][0] == ACK)
         {
             /* ACK massage*/
+            /* | ACK (1B)| */
             if(gRxDataCount[CurRxBuffIndex] == 1)
                 flag = RS485_ACK_FLAG;
         }else if(gRxDataBuffer[CurRxBuffIndex][0] == NACK)
         {
             /* NACK massage*/
+            /* | NACK (1B)| */
             if(gRxDataCount[CurRxBuffIndex] == 1)
                 flag = RS485_NACK_FLAG;
         }else if(gRxDataBuffer[CurRxBuffIndex][0] == EOT)
@@ -421,9 +428,14 @@ void RS485_SwTimer_Callback(void *arg)
                     {
                         Proccess_State = RS485_POLLING_STATE;
                         flag = RS485_POLLING_FLAG;
+#if (TEST_CODE == 1)
+                        /* Checksum fail Invalid massage*/
+                        PutCommandToBuffer((RingBufferManage_t*)&RxBufferInfor, 0xfd,0,0);
+#endif
                     }else
                     {
 #if (TEST_CODE == 1)
+                        /* Checksum fail Invalid massage*/
                         PutCommandToBuffer((RingBufferManage_t*)&RxBufferInfor, 0xff,0,0);
 #endif
                         RS485_Transmit((uint8_t*)&nack_Frame,1);
@@ -449,6 +461,7 @@ void RS485_SwTimer_Callback(void *arg)
                         }else
                         {
 #if (TEST_CODE == 1)
+                           /* Checksum fail Invalid massage*/
                            PutCommandToBuffer((RingBufferManage_t*)&RxBufferInfor, 0xff,0,0);
 #endif
                            RS485_Transmit((uint8_t*)&nack_Frame,1);
@@ -482,6 +495,7 @@ void RS485_SwTimer_Callback(void *arg)
             {
                 //TO DO
                 /* Only re-transmit few times */
+                
                 RS485_Transmit((uint8_t*)gDataFrame,gFrameLength);
             }
         }

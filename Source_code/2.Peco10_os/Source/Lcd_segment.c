@@ -8,6 +8,93 @@
 /*==================================================================================================
                                            CONSTANTS
 ==================================================================================================*/
+
+
+/*==================================================================================================
+                                       DEFINES AND MACROS
+==================================================================================================*/
+#define LCD_CS_ENABLE()           HAL_GPIO_WritePin(SCE_PORT,SCE_PIN,GPIO_PIN_SET)
+#define LCD_CS_DISABLE()          HAL_GPIO_WritePin(SCE_PORT,SCE_PIN,GPIO_PIN_RESET)
+//#define LCD_CS_ENABLING()         ((GPIOC->IDR)&(uint32_t)0x4000U)
+#define LCD_CS_ENABLING()         HAL_GPIO_ReadPin(SCE_PORT,SCE_PIN)
+
+/* LCD driver Display off (Active Low level) */
+
+#define DOT_COMMA_MASK_FONT1          0x11U
+#define DOT_COMMA_MASK_FONT2          0x30U
+
+/* Option byte control */
+/*==================================================================================================
+*                                              ENUMS
+==================================================================================================*/
+
+/*==================================================================================================
+*                                  STRUCTURES AND OTHER TYPEDEFS
+==================================================================================================*/
+
+typedef struct 
+{
+    /* 24 bit */
+    /*| reserve (5b) | KMn (3b) | Pn (3b) | FL (1b) | DR (1b) | DT (1b) | FCn (3b) | OC (1b) | SC (1b) | BUn (3b) | DD(00) |*/
+    /*|      0       |  1 1 1   |  0 0 0  |    0    |    0    |    0    |  0 0 1   |    0    |   0     |  0 0 0   |  0 0   |*/
+    /*|          0x07           |                    0                        |                 0x80                       |*/
+    uint32_t reserved0 : 8;
+    uint32_t reserved1 : 5;
+    uint32_t KM        : 3;
+    uint32_t P         : 3;
+    uint32_t FL        : 1;
+    uint32_t DR        : 1;
+    uint32_t DT        : 1;
+    uint32_t FC        : 3;
+    uint32_t OC        : 1;
+    uint32_t SC        : 1;
+    uint32_t BU        : 3;
+    uint32_t DD        : 2;
+}ControlData0_t;
+
+typedef struct 
+{
+    /* 12 bit */
+    /*|      PGn (6b)    |   PF (4b)   | DD(01) |*/
+    /*|    0 0 0 0 0 0   |   0 0 0 0   |  0 1   |*/
+    /*|           |            0x01             |*/
+    uint16_t reserved  : 4;
+    uint16_t PG        : 8;
+    uint16_t DD        : 2;
+}ControlData1_t;
+
+typedef struct 
+{
+    /* 36 bit*/
+    /*|  reserve (4b)  |   reserve (6b)  |      W1x (8b)     |      W2x (8b)     |      W3x (8b)     |  DD(10) |*/
+    /*|    0 0 0 0     |   0 0 0 0 0 0   |  0 0 0 0 0 0 0 0  |  0 0 0 0 0 0 0 0  |  0 0 0 0 0 0 0 0  |   1 0   |*/
+    /*|                |         0x0           |        0x0        |        0x0        |          0x03         |*/
+    uint32_t reserved  : 6;
+    uint32_t W1        : 8;
+    uint32_t W2        : 8;
+    uint32_t W3        : 8;
+    uint32_t DD        : 2;
+}ControlData2_t;
+
+typedef struct 
+{
+    /* 36 bit*/
+    /*|  reserve (4b)  |   reserve (6b)  |       W4x (8b)    |       W5x (8b)    |       W6x (8b)    |  DD(11) |*/
+    /*|    0 0 0 0     |   0 0 0 0 0 0   |  0 0 0 0 0 0 0 0  |  0 0 0 0 0 0 0 0  |  0 0 0 0 0 0 0 0  |   1 1   |*/
+    /*|                |         0x0           |        0x0        |        0x0        |          0x03         |*/
+    uint32_t reserved  : 6;
+    uint32_t W4        : 8;
+    uint32_t W5        : 8;
+    uint32_t W6        : 8;
+    uint32_t DD        : 2;
+}ControlData3_t;
+/*==================================================================================================
+*                                  LOCAL VARIABLE DECLARATIONS
+==================================================================================================*/
+
+/*==================================================================================================
+*                                  GLOBAL VARIABLE DECLARATIONS
+==================================================================================================*/
 /**
  * @brief Display data table for number in even position
  */
@@ -42,22 +129,35 @@ static const uint8_t DisplayDataFont2[32U] =
 static const uint8_t LcdDeviceCode = LCD_DEVICE_CODE;
 
 /* Control data for the SPI frame DD=00 */
-static const uint8_t ControlData0[3U] = 
+uint8_t ControlData0[3U] = 
 {
+    /* 24 bit */
+    /*| reserve (5b) | KMn (3b) | Pn (3b) | FL (1b) | DR (1b) | DT (1b) | FCn (3b) | OC (1b) | SC (1b) | BUn (3b) | DD(00) |*/
+    /*|      0       |  1 1 1   |  0 0 0  |    0    |    0    |    0    |  0 0 1   |    0    |   0     |  0 0 0   |   00   |*/
+    /*|          0x07           |                    0                        |                 0x80                       |*/
     0x07U,          /* Seg56 output and Key Scan 2-6 */
     0x00U,          /* Segment output for S1-6, 1/3Bias, 1/4Duty, frame=Fosc/10752 */
     0x80U,          /* frame=Fosc/10752, Internal osc, segment on, Normal mode, DD=00 */
 };
 
 /* Control data for the SPI frame DD=01 */
-static const uint8_t ControlData1[1U] = 
+uint8_t ControlData1[2U] = 
 {
+    /* 12 bit */
+    /*|      PGn (6b)    |   PF (4b)   | DD(01) |*/
+    /*|    0 0 0 0 0 0   |   0 0 0 0   |  0 1   |*/
+    /*|           |            0x01             |*/
+    0x0U,
     0x01U,          /* Dont care PWM frequency, DD=01 */
 };
 
 /* Control data for the SPI frame DD=10 */
-static const uint8_t ControlData2[4U] = 
+uint8_t ControlData2[4U] = 
 {
+    /* 36 bit*/
+    /*|  reserve (4b)  |   reserve (6b)  |      W1x (8b)     |      W2x (8b)     |      W3x (8b)     |  DD(10) |*/
+    /*|    0 0 0 0     |   0 0 0 0 0 0   |  0 0 0 0 0 0 0 0  |  0 0 0 0 0 0 0 0  |  0 0 0 0 0 0 0 0  |   1 0   |*/
+    /*|                |         0x0           |        0x0        |        0x0        |          0x03         |*/
     0x00U,          /* Dont care PWM output */
     0x00U,          /* Dont care PWM output */
     0x00U,          /* Dont care PWM output */
@@ -65,49 +165,46 @@ static const uint8_t ControlData2[4U] =
 };
 
 /* Control data for the SPI frame DD=11 */
-static const uint8_t ControlData3[4U] = 
+uint8_t ControlData3[4U] = 
 {
+    /* 36 bit*/
+    /*|  reserve (4b)  |   reserve (6b)  |       W4x (8b)    |       W5x (8b)    |       W6x (8b)    |  DD(11) |*/
+    /*|    0 0 0 0     |   0 0 0 0 0 0   |  0 0 0 0 0 0 0 0  |  0 0 0 0 0 0 0 0  |  0 0 0 0 0 0 0 0  |   1 1   |*/
+    /*|                |         0x0           |        0x0        |        0x0        |          0x03         |*/
     0x00U,          /* Dont care PWM output */
     0x00U,          /* Dont care PWM output */
     0x00U,          /* Dont care PWM output */
     0x03U,          /* Dont care PWM output, DD=11 */
 };
-/*==================================================================================================
-                                       DEFINES AND MACROS
-==================================================================================================*/
-#define LCD_CS_ENABLE()           HAL_GPIO_WritePin(SCE_PORT,SCE_PIN,GPIO_PIN_SET)
-#define LCD_CS_DISABLE()          HAL_GPIO_WritePin(SCE_PORT,SCE_PIN,GPIO_PIN_RESET)
-//#define LCD_CS_ENABLING()         ((GPIOC->IDR)&(uint32_t)0x4000U)
-#define LCD_CS_ENABLING()         HAL_GPIO_ReadPin(SCE_PORT,SCE_PIN)
 
-/* LCD driver Display off (Active Low level) */
-//#define LCD_DISPLAY_ENABLE()             HAL_GPIO_WritePin(GPIOC, GPIO_PIN_15, GPIO_PIN_SET)
-//#define LCD_DISPLAY_DISABLE()            HAL_GPIO_WritePin(GPIOC, GPIO_PIN_15, GPIO_PIN_RESET)
-
-#define DOT_COMMA_MASK_FONT1          0x11U
-#define DOT_COMMA_MASK_FONT2          0x30U
-/*==================================================================================================
-*                                              ENUMS
-==================================================================================================*/
-
-/*==================================================================================================
-*                                  STRUCTURES AND OTHER TYPEDEFS
-==================================================================================================*/
-
-/*==================================================================================================
-*                                  LOCAL VARIABLE DECLARATIONS
-==================================================================================================*/
-
-/*==================================================================================================
-*                                  GLOBAL VARIABLE DECLARATIONS
-==================================================================================================*/
 /* LCD display RAM */
-static uint8_t LcdDisplayRam[LCD_DISPLAY_RAM_SIZE];
+uint8_t LcdDisplayRam[LCD_DISPLAY_RAM_SIZE];
 
 #if (PROGRAM_USE_RTOS == STD_ON)
     osEventFlagsId_t evtFrameTransfer_id;
 #endif
 
+void Lcd_Segment_PWM_Config(void)
+{
+    /* Set new duty */
+    /* W1x = 0x3F ~ Duty = (253/256)* Tp*/
+    ControlData2[2] |= 0x3F;
+    /* Set period */
+    /* PF = 0xF   ~ Period = fosc/256  */
+    ControlData1[1] |= 0x3C;
+    Lcd_Segment_Start_Display();
+}
+
+void Lcd_Segment_PWM_Start(void)
+{
+    /* Set Output pin S1 as alternate function   */
+    /* Pn = 0x1 ~  S1 -> P1/G1  */
+    ControlData0[1] |= 0x20;
+    /* Set S1 pin generate PWM */
+    /* PG1 = 0 ~ PWM output*/
+    ControlData1[0] &= 0xF0;
+    Lcd_Segment_Start_Display();
+}
 /*==================================================================================================
 *                                       FUNCTION PROTOTYPES
 ==================================================================================================*/
@@ -377,8 +474,6 @@ void Lcd_Segment_Start_Display(void)
 {
     uint8_t LcdSpiFrame[LCD_FRAME_LENGTH];
     uint8_t i,TempData;
-    
-    //LCD_DISPLAY_ENABLE();
 
     /* Send the LcdDisplayRam to IC driver */
     /*First frame 72 bit Display data 22 bit control data 2 bit direction data*/
@@ -389,8 +484,8 @@ void Lcd_Segment_Start_Display(void)
     
     /*Second frame 82 bit Display data 10 bit control data 2 bit direction data*/
     memcpy(LcdSpiFrame,&LcdDisplayRam[9],11U);
-    LcdSpiFrame[10] &= (uint8_t)0xF0;
-    memcpy(&LcdSpiFrame[11],ControlData1,1U);
+    LcdSpiFrame[10] = (LcdSpiFrame[10] & (uint8_t)0xF0) | ((ControlData1[0] >> 4) & 0xF);
+    memcpy(&LcdSpiFrame[11],&ControlData1[1],1U);
     
     Lcd_Frame_Transfer(LcdSpiFrame);
     
@@ -412,6 +507,10 @@ void Lcd_Segment_Start_Display(void)
     
     Lcd_Frame_Transfer(LcdSpiFrame);
 }
+
+
+
+
 
 /**
  * @brief  This function uses to prepare data which will be displayed to LCD segment

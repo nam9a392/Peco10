@@ -13,48 +13,96 @@
 /*==================================================================================================
 *                                  STRUCTURES AND OTHER TYPEDEFS
 ==================================================================================================*/
+#define DISPLAY_STRING              0
+#define DISPLAY_INVERSE_STRING      1
+#define DISPLAY_CHARACTER           2
+#define CLEAR_CHARACTER             3
+
+/*
+*   @inplement: enumeration_MsgForDisplay_t
+*   @brief: the massage type using for queue that comunicate  
+*       PreviousStatus          : the nearest state that receive from keypad (Keypad_Button_Type)
+*       CurrentStatus           : the current state that receive from keypad (Keypad_Button_Type)
+*       PushTime                : number of pushing the same button continously
+*/
 typedef struct {
-  uint8_t *msg;
+  uint8_t  *msg;
   uint16_t length;
-  uint8_t line;
-  uint8_t offset;
+  uint8_t  line;
+  uint8_t  offset;
+  uint8_t  type;
 } MsgForDisplay_t;
 
+/*
+*   @inplement: enumeration_KeypadStatus_t
+*   @brief: Hold the input state from keypad
+*       PreviousStatus          : the nearest state that receive from keypad (Keypad_Button_Type)
+*       CurrentStatus           : the current state that receive from keypad (Keypad_Button_Type)
+*       PushTime                : number of pushing the same button continously
+*/
 typedef struct{
     Keypad_Button_Type  PreviousStatus;
     Keypad_Button_Type  CurrentStatus;
     uint8_t             PushTime;
 }KeypadStatus_t;
 
+/*
+*   @inplement: enumeration_LcdSegmentInputControl_t
+*   @brief: Hold the state to control display segment lcd
+*       row,col                 : start position of input
+*       max_size                : number of digit allowed to insert
+*       clear_size              : number of 0 display after push clear button
+*       mask                    : 1 hide input | 0 show input
+*       blink                   : Cursor blinking : 1 blink   | 0 not blink
+*       blink_error             : Error code blinking : 1 blink   | 0 not blink
+*       enable                  : 1 allow insert data from keypad | 0 negative
+*       row_error,col_error     : error code display position
+*       buf[16]                 : temporary buffer storing input data display segment lcd to send to cpu
+*       len                     : Input data length
+*/
 typedef struct{
     uint8_t  row;
     uint8_t  col;
+    uint8_t  row_error;
+    uint8_t  col_error;
     uint8_t  max_size;
     uint8_t  clear_size;
     uint8_t  mask;
     uint8_t  blink;
     uint8_t  enable;
     uint8_t  blink_error;
-    uint8_t  row_error;
-    uint8_t  col_error;
+    uint8_t  buf[16];
+    uint8_t  len;
 }LcdSegmentInputControl_t;
 
+/*
+*   @inplement: enumeration_LcdCharacterInputControl_t
+*   @brief: Hold the state to control display character lcd
+*       row,col                 : start position of input
+*       max_size                : number of digit allowed to insert
+*       clear_size              : number of 0 display after push clear button
+*       CursorEffect            : 0 Turn off | 1 Turn on | 2 Blinking
+*       buf[64]                 : temporary buffer storing input data display character lcd to send to cpu 
+*       len                     : Input data length
+*/
 typedef struct{
     uint8_t  row;
     uint8_t  col;
     uint8_t  max_size;
     uint8_t  clear_size;
     uint8_t  CursorEffect;
+    uint8_t  buf[64];
+    uint8_t  len;
+    uint8_t  enable;
 }LcdCharacterInputControl_t;
+
 /*
 *   @inplement: enumeration_InputControl_t
 *   @brief: Hold the state to control input from keypad
-*       row,col         : start position of input
-*       clear_size      : number of 0 display after push clear button
-*       max_size        : number of digit allowed to insert
-*       mask            : 1 hide input | 0 show input
-*       blink           : 1 blinking   | 0 not blinking
-*       enable          : 1 allow insert data from keypad | 0 negative
+*       LcdSegment      : group state control lcd segment display
+*       LcdCharacter    : group state control lcd charcacter display
+*       ErrorCode       : buffer storring current error code from keyboard
+*       ErrorCodeLength : error code length 
 *       preset_button   : 1 alow using P1~P4 button | 0 negative
 */
 typedef struct{
@@ -63,7 +111,6 @@ typedef struct{
     uint8_t ErrorCodeLength;
     uint8_t ErrorCode[7];
     uint8_t preset_button;
-    uint8_t buffer_size;
 }InputControl_t;
 
 /*
@@ -127,6 +174,14 @@ typedef struct{
 #define LCDCHARACTER_PUT_CHAR       (1 << 1)
 #define LCDCHARACTER_PUT_STRING     (1 << 2)
 
+
+#define NO_PASSWORD_CHECK       0
+#define PASSWORD_CHECKING       1
+
+#define NORMAL_KEY              0
+#define SPECIAL_KEY             1
+#define UNKNOWN_KEY             2
+#define LOSS_KEY                3
 /*==================================================================================================
 *                                              ENUMS
 ==================================================================================================*/
@@ -143,7 +198,7 @@ typedef struct{
 /* Threads ID*/
 osThreadId_t LcdSegmentDisplay_Task_Id,
              ScanKeypad_DisplayLcdCharacter_Task_Id,
-             CommandHandler_Task_Id,         // thread id
+             CommandHandler_Task_Id,
              Main_Preset_Task_Id;
 
 /* Queues ID*/
@@ -154,6 +209,9 @@ osMessageQueueId_t LcdCharacterMsgQueue_Id,
 osTimerId_t Timer1_Id;                            // timer id
 osTimerId_t Timer2_Id;                            // timer id
 osTimerId_t Timer3_Id;                            // timer id
+
+/*Mutex ID*/
+osMutexId_t LcdCharacter_Mutex_Id;
 
 /*Define attributes for each thread*/
 const osThreadAttr_t LcdSegmentDisplay_Task_Attr = {
@@ -186,7 +244,7 @@ static uint8_t gMainAddress,gSubAddress;
 static uint8_t gSubAddress_Coressponding;
 
 /* Current State of Preset*/
-uint8_t gCurrentState = IDLE_STATE;
+volatile uint8_t gCurrentState = IDLE_STATE;
 //uint8_t gCurrentState = PRINTER_SETTING;
 
 /* Variable to handle scanning Keypad*/
@@ -196,16 +254,23 @@ volatile Std_Return_Type gInputDone = E_NOT_OK;
 volatile InputControl_t gInputCtrl = {0};
 volatile uint8_t gBlink = 0;
 
-/* temporary array storing data input from character lcd to send to cpu */
-uint8_t LcdCharacterInput[64] = {0};
-uint8_t LcdCharacterInputLength = 0;
+/* Combine keys to change input state */
+const uint8_t Registration_CombineKeys[]  = {KEYPAD_ENTER,KEYPAD_ENTER,KEYPAD_CLEAR,KEYPAD_ENTER,KEYPAD_CLEAR};
+const uint8_t DirectSetting_CombineKeys[] = {KEYPAD_CLEAR,KEYPAD_CLEAR,KEYPAD_CLEAR};
+const uint8_t Printing_CombineKeys[]      = {KEYPAD_ENTER,KEYPAD_ENTER,KEYPAD_ENTER,KEYPAD_ENTER,KEYPAD_ENTER};
 
-const uint8_t ErrorCodeClear[7]="       ";
-const uint8_t InitialString[]="PECO10";
+const uint8_t Registration_Passcode  = REGISTRATION_PASS;
+const uint8_t DirectSetting_Passcode = PROCESS_PASS;
+
+const uint8_t cErrorCodeClear[8]="        ";
+const uint8_t cCodeTest[] = "8,8,8,8,8,8,8,";
+const uint8_t cInitialString[]="PECO10";
+
+
 /*==================================================================================================
 *                                       FUNCTION PROTOTYPES
 ==================================================================================================*/
-static void LcdCharacter_PutString(uint8_t line, uint8_t offset, uint8_t *pString, uint16_t length, uint32_t timeout);
+static void LcdCharacter_PutString(uint8_t line, uint8_t offset, uint8_t *pString, uint16_t length, uint8_t action_type, uint32_t timeout);
 static void LcdSegmentDisplaySetEvent(void);
 
 static void LcdSegmentDisplay_Task(void *argument);
@@ -218,6 +283,8 @@ static void LcdSegmentProcess(uint8_t opcode,uint8_t* pData,uint8_t length);
 static void LcdCharacterProcess(uint8_t opcode,uint8_t* pData,uint8_t length);
 static uint8_t SpecialKeyCheck(KeypadStatus_t *KeypadStatus);
 static void LcdSegment_PrepareNewInput(void);
+static void SwitchInputState(uint8_t state);
+static void ResetInputCtrlStatus(void);
 
 /* Timer callback to handle input from keypad*/
 void Timer1_Callback (void *arg);
@@ -228,6 +295,36 @@ void Timer3_Callback (void *arg);
 ==================================================================================================*/
 
 /***************************** logic function *************************************/
+static void SwitchInputState(uint8_t state)
+{
+    gInputCtrl.LcdCharacter.len = 0;
+    gInputCtrl.LcdSegment.len   = 0;
+    gInputCtrl.LcdCharacter.row = 0;
+    gInputCtrl.LcdCharacter.len = 80;
+    gInputCtrl.LcdCharacter.col = 0;
+    Lcd_ShiftDisplay_Turn_Off();
+    switch(state)
+    {
+        case 0:
+            gCurrentState = IDLE_STATE;
+            break;
+        case 0x01:
+            /*Go to system setting mode*/
+            gCurrentState = PUMP_SETTING_STATE;
+            break;
+        case 0x02:
+            /*Go to printing mode*/
+            gCurrentState = PRINTER_SETTING_STATE;
+            Lcd_ShiftDisplay_Turn_On();
+            break;
+        case 0x03:
+            /*Go to fueling mode*/
+            gCurrentState = FUELING_STATE;
+            break;
+        default:
+            gCurrentState = IDLE_STATE;
+    }
+}
 static uint8_t LcdSegmentData_HexToString(uint8_t *pData,uint8_t DataLength, uint8_t *pString)
 {
     uint8_t i,j,NumberOfDigit;
@@ -235,18 +332,23 @@ static uint8_t LcdSegmentData_HexToString(uint8_t *pData,uint8_t DataLength, uin
     uint8_t StartOfNum = 0;
     uint8_t temp =0;
 
-#define DOT_TYPE                1
-#define COMMA_TYPE              0
-#define DECIMAL_POINT_MASK      0x1U
-#define DECIMAL_POINT_SHIFT     1
-#define ZERO_DISPLAY_MASK       0x1U
-#define ZERO_DISPLAY_SHIFT      0
+#define DOT_TYPE                        1
+#define COMMA_TYPE                      0
+#define DECIMAL_POINT_MASK              0x1U
+#define DECIMAL_POINT_SHIFT             1
+#define ZERO_DISPLAY_MASK               0x1U
+#define ZERO_DISPLAY_SHIFT              0
+#define DIGITLENGTH_DISPLAY_MASK        0x7U
+#define DIGITLENGTH_DISPLAY_SHIFT       2
     /* Ctr1 0(1B) | Ctr1 1(1B) | Row(4B) */
-    /* Ctr1 0: | 1 | 0 | 0 | 0 | 0 | 0 | Comma/Dot | Leading Zero |*/
-    uint8_t Zero_Display = (pData[0] >> ZERO_DISPLAY_SHIFT)  & ZERO_DISPLAY_MASK;
-    uint8_t DecimalPoint = (pData[0] >> DECIMAL_POINT_SHIFT) & DECIMAL_POINT_MASK;
-    /* Ctr1 1: | 1 | Digit 6  | Digit 5  | Digit 4  | Digit 3  | Digit 2  | Digit 1  | Digit 0 |*/
-    
+    /* Ctr1 0: | Flag = 1 | 0 | 0 |  0   |  0   |  0   | Comma/Dot | Leading Zero |*/
+    /*         |                  |    Digit Length    |  */
+    uint8_t Zero_Display = (pData[0] >> ZERO_DISPLAY_SHIFT)         & ZERO_DISPLAY_MASK;
+    uint8_t DecimalPoint = (pData[0] >> DECIMAL_POINT_SHIFT)        & DECIMAL_POINT_MASK;
+    uint8_t digit_length = (pData[0] >> DIGITLENGTH_DISPLAY_SHIFT)  & DIGITLENGTH_DISPLAY_MASK;
+    /* Decimal point position on row*/
+    /* Ctr1 1: | Flag = 1 | Digit 6  | Digit 5  | Digit 4  | Digit 3  | Digit 2  | Digit 1  | Digit 0 |*/
+
     /* Leading zero number is displayed or not*/
     if(Zero_Display == 1)
     {
@@ -264,7 +366,7 @@ static uint8_t LcdSegmentData_HexToString(uint8_t *pData,uint8_t DataLength, uin
             temp = (pData[2 + i/2] & 0xf);
         }
         /*Bypass zero number from the left*/
-        if((temp != 0)&&(StartOfNum == 0))
+        if(((temp != 0)&&(StartOfNum == 0)) || (i == (((DataLength-2)*2) - digit_length)))
         {
             StartOfNum = 1;
         }
@@ -273,9 +375,20 @@ static uint8_t LcdSegmentData_HexToString(uint8_t *pData,uint8_t DataLength, uin
             pString[j] = temp + 0x30;
             j++;
         }
+//        if((i == ((DataLength-2)*2 - 1)) && (StartOfNum == 0))
+//        {
+//            pString[j] = '0';
+//            j++;
+//        }
         /*Add decimal point to number*/
         if(0 != (pData[1] & (0x1 << (7-i))))
         {
+            if(StartOfNum == 0)
+            {
+                StartOfNum = 1;
+                pString[j] = '0';
+                j++;
+            }
             if(DecimalPoint == DOT_TYPE)
             {
                 pString[j] = '.';
@@ -294,7 +407,7 @@ static uint8_t LcdSegmentData_HexToString(uint8_t *pData,uint8_t DataLength, uin
 
 
 /***************************** Function to handle Display component *************************************/
-static void LcdCharacter_PutString(uint8_t line, uint8_t offset, uint8_t *pString, uint16_t length, uint32_t timeout)
+static void LcdCharacter_PutString(uint8_t line, uint8_t offset, uint8_t *pString, uint16_t length, uint8_t action_type, uint32_t timeout)
 {
     MsgForDisplay_t pMsgQueue;
     pMsgQueue.msg = (uint8_t*)osMemoryPoolAlloc(LcdCharacter_MemoryPool_Id,0U);
@@ -302,7 +415,8 @@ static void LcdCharacter_PutString(uint8_t line, uint8_t offset, uint8_t *pStrin
     pMsgQueue.line=line;
     pMsgQueue.offset=offset;
     pMsgQueue.length=length;
-    if(length > 0)
+    pMsgQueue.type = action_type;
+    if((length > 0)&&(pString != NULL))
     {
         memcpy(pMsgQueue.msg,pString,length);
     }
@@ -318,10 +432,9 @@ static void LcdSegmentDisplaySetEvent(void)
 static void LcdSegmentProcess(uint8_t opcode,uint8_t* pData,uint8_t length)
 {
     uint8_t LcdSegmentBuffer[14] = {0};
-    const uint8_t CodeTest[] = "8,8,8,8,8,8,8,";
     uint8_t DigitNumbers = 0;
     uint8_t row,col,temp,temp1;
-    row=col=temp=temp1 = 0;
+    row=col=temp=temp1= 0;
     
 #define INPUT_CTRL_ROW_MASK             0x3
 #define INPUT_CTRL_ROW_SHIFT            5U
@@ -343,6 +456,7 @@ static void LcdSegmentProcess(uint8_t opcode,uint8_t* pData,uint8_t length)
     switch(opcode) 
     {
         case 0x10:
+            /* Display Ascii type*/
             /* Ctr1 0(1B) | Ctr1 1(1B) | Ctr1 2(1B) | Row 1(7B) | Row 2(7B) | Row 3(7B) */
             /* Ctrl 0    :| Bit7     | Bit6        | Bit5        | Bit4 | Bit3 | Bit2 | Bit1          | Bit0        |
                           | Flag = 1 | Row = 0,1,2 ( 3 read only)| Digit = 0~7        | Hide Mask(0,1)| blink (0|1) |
@@ -401,6 +515,7 @@ static void LcdSegmentProcess(uint8_t opcode,uint8_t* pData,uint8_t length)
                     01 : Set all segments of display on
                     02 : Clear all segments
                     03 : Set Specific indicator that is set by Data[1]
+                    04 : Stop display and clear receive error code
             Data[1] : 0x80 | Indicator_select
                     Indicator behavior (1|0) ~ (ON|OFF)
                    | Bit7 | Bit6 | Bit5 | Bit4 | Bit3 | Bit2 | Bit1 | Bit0 | 
@@ -410,16 +525,19 @@ static void LcdSegmentProcess(uint8_t opcode,uint8_t* pData,uint8_t length)
             {
                 case 1:
                     /* Set all segments of display on */
-                    Lcd_Segment_Put_Data((uint8_t*)CodeTest,strlen((char*)CodeTest),0,0);
-                    Lcd_Segment_Put_Data((uint8_t*)CodeTest,strlen((char*)CodeTest),1,0);
-                    Lcd_Segment_Put_Data((uint8_t*)CodeTest,strlen((char*)CodeTest),2,0);
+                    for (row=0; row < LCD_SEGMENT_ROWS; row++)
+                    {
+                        Lcd_Segment_Put_Data((uint8_t*)cCodeTest,LCD_SEGMENT_COLS*2,row,0);
+                    }
                     break;
                 case 2:
                     /* Clear all segments */
-                    Lcd_Segment_Clear_Line(0);
-                    Lcd_Segment_Clear_Line(1);
-                    Lcd_Segment_Clear_Line(2);
-                    Lcd_Segment_Put_Indicator(0);
+                    for (row=0; row < LCD_SEGMENT_ROWS; row++)
+                    {
+                        Lcd_Segment_Clear_Line(row);
+                    }
+                    /* Clear input buffer*/
+                    gInputCtrl.LcdSegment.len = 0;
                     break;
                 case 3:
                     /* Set Specific indicator that is set by Data[1] */
@@ -436,7 +554,7 @@ static void LcdSegmentProcess(uint8_t opcode,uint8_t* pData,uint8_t length)
                             if((osTimerIsRunning(Timer3_Id)) && (gInputCtrl.LcdSegment.blink == 0))
                                 osTimerStop(Timer3_Id);
                         }
-                        Lcd_Segment_Put_Data((uint8_t*)ErrorCodeClear,gInputCtrl.ErrorCodeLength,gInputCtrl.LcdSegment.row_error,gInputCtrl.LcdSegment.col_error);
+                        Lcd_Segment_Put_Data((uint8_t*)cErrorCodeClear,gInputCtrl.ErrorCodeLength,gInputCtrl.LcdSegment.row_error,gInputCtrl.LcdSegment.col_error);
                         gInputCtrl.ErrorCodeLength = 0;
                     }
                     break;
@@ -445,7 +563,7 @@ static void LcdSegmentProcess(uint8_t opcode,uint8_t* pData,uint8_t length)
             }
             break;
         case 0x14:
-            /* Ctr1(1B) :| Len(1B)  | Data(nB) |
+            /* Ctr1(1B)  | Len(1B)  | Data(nB) |
                Ctrl     :| Bit7     | Bit6 | Bit5 | Bit4 | Bit3 | Bit2 | Bit1        | Bit0     |
                          | Flag = 1 | Row = 0,1,2 | Digit = 0~7        | blink (0|1) | Reserved |
             */
@@ -475,9 +593,11 @@ static void LcdSegmentProcess(uint8_t opcode,uint8_t* pData,uint8_t length)
                     Lcd_Segment_Put_Data((uint8_t*)&gInputCtrl.ErrorCode,gInputCtrl.ErrorCodeLength,gInputCtrl.LcdSegment.row_error,gInputCtrl.LcdSegment.col_error);
                 }
             }
-            
-            break;       
-        /*Control Byte : Leading Zero display | Sign(dot or comma) */
+            break;
+        /* Display Short Hex type
+           1 Byte 0xab convert into ascii 2 digits "ab" 
+        */
+        /*Ctr1(2B) : Leading Zero display | Sign(dot or comma) */
         case 0x90:
             /* Ctr1(2B) | Row 1(4B) |Ctr1(2B) | Row 2(4B) |Ctr1(2B) | Row 3(4B) */
             Lcd_Segment_Clear_Line(0);
@@ -513,32 +633,34 @@ static void LcdCharacterProcess(uint8_t opcode,uint8_t* pData,uint8_t length)
 {
     uint16_t LenthOfRow1 = 0;
     uint16_t LenthOfRow2 = 0;
+    osMutexAcquire(LcdCharacter_Mutex_Id, osWaitForever);
     switch(opcode) 
     {
         /* Ctr1 0(1Byte) | Ctr1 1(1Byte) | Ctr1 2(1Byte) | DataLen (1 Byte) | Row 1(n Byte) | DataLen (1 Byte) | Row 2(n Byte) */
         /* Ctr1 0  | Bit7     | Bit6      | Bit5 | Bit4 | Bit3 | Bit2 | Bit1 | Bit0 |
                    | Flag = 1 | Row = 0,1 | Digit = 0~63                            |
-           Ctr1 1  | Bit7     | Bit6      | Bit5 | Bit4 | Bit3 | Bit2 | Bit1 | Bit0 |
-                   | Flag = 1 | Reserve   | Input Max Size                          |
+           Ctr1 1  | Bit7     | Bit6  | Bit5 | Bit4 | Bit3 | Bit2 | Bit1 | Bit0     |
+                   | Flag = 1 |  Input Max Size                          | Enable   |
            Ctr1 2  | Bit7     | Bit6      | Bit5 | Bit4 |  Bit3  |  Bit2  | Bit1             | Bit0              |
                    | Flag = 1 | Reserve   |  Reserve    | Reset Max Size  | CursorEffect On/off (0/1) Blinking 2 |
         */
         case 0x80:
             gInputCtrl.LcdCharacter.row             = (pData[0] >> 6) & 0x1;
             gInputCtrl.LcdCharacter.col             = (pData[0] >> 0) & 0x3F;
-            gInputCtrl.LcdCharacter.max_size        = (pData[1] >> 0) & 0x3F;
+            gInputCtrl.LcdCharacter.enable          = (pData[1] >> 0) & 0x1;
+            gInputCtrl.LcdCharacter.max_size        = (pData[1] >> 1) & 0x3F;
             gInputCtrl.LcdCharacter.CursorEffect    = (pData[2] >> 0) & 0x3;
             gInputCtrl.LcdCharacter.clear_size      = (pData[2] >> 2) & 0x3;
             Lcd_Clear();
             Lcd_Cursor_Effect(gInputCtrl.LcdCharacter.CursorEffect);
             // Row 1 data from position 4 length equal to pData[3]
             LenthOfRow1 = pData[3] & 0x7F;
-            LcdCharacter_PutString(0,0,&pData[4],LenthOfRow1,0);
+            LcdCharacter_PutString(0,0,&pData[4],LenthOfRow1,DISPLAY_STRING,0);
             // Row 2 data from position 5 + LenthOfRow1 length equal to pData[4 + LenthOfRow1]
             LenthOfRow2 = pData[4 + LenthOfRow1]  & 0x7F;
-            LcdCharacter_PutString(1,0,&pData[4 + LenthOfRow1 + 1],LenthOfRow2,0);
+            LcdCharacter_PutString(1,0,&pData[4 + LenthOfRow1 + 1],LenthOfRow2,DISPLAY_STRING,0);
             /*Move cursor to receive position*/
-            LcdCharacter_PutString(gInputCtrl.LcdCharacter.row,gInputCtrl.LcdCharacter.col,NULL,0,0);
+            LcdCharacter_PutString(gInputCtrl.LcdCharacter.row,gInputCtrl.LcdCharacter.col,NULL,0,DISPLAY_STRING,0);
             break;
             
         case 0x81:
@@ -546,14 +668,14 @@ static void LcdCharacterProcess(uint8_t opcode,uint8_t* pData,uint8_t length)
             // Row 1 data from position 2 length equal to pData[3]
             Lcd_Clear();
             LenthOfRow1 = pData[3] & 0x7F;
-            LcdCharacter_PutString(0,0,&pData[4],LenthOfRow1,0);
+            LcdCharacter_PutString(0,0,&pData[4],LenthOfRow1,DISPLAY_STRING,0);
             break;
         case 0x82:
             /* Ctr1 0(1Byte) | Ctr1 1(1Byte) | Ctr1 2(1Byte) | DataLen (1 Byte) | Row 2(n Byte) */
             // Row 1 data from position 1 length equal to pData[3]
             Lcd_Clear();
             LenthOfRow2 = pData[3] & 0x7F;
-            LcdCharacter_PutString(1,0,&pData[4],LenthOfRow2,0);
+            LcdCharacter_PutString(1,0,&pData[4],LenthOfRow2,DISPLAY_STRING,0);
             break;
         case 0x13:
             /* Data[0] | Data[1] 
@@ -566,6 +688,8 @@ static void LcdCharacterProcess(uint8_t opcode,uint8_t* pData,uint8_t length)
                 case 1:
                     Lcd_Cursor_Effect(LCD_CURSOR_OFF);
                     Lcd_Clear();
+                    /* Clear Input buffer*/
+                    gInputCtrl.LcdCharacter.len = 0;
                     break;
                 default:
                     break;
@@ -574,39 +698,28 @@ static void LcdCharacterProcess(uint8_t opcode,uint8_t* pData,uint8_t length)
         default:
             break;
     }
+    osMutexRelease(LcdCharacter_Mutex_Id);
 }
 
 /* This function only serve Main_Preset_Task for clearing segment display to defaut value before new input*/
 static void LcdSegment_PrepareNewInput(void)
 {
-    uint8_t j,temp_row;
-    j = temp_row = 0;
+    uint8_t j;
+    j = 0;
     /* Clear segment display for new input*/
     for(j=0;j<gInputCtrl.LcdSegment.max_size;j++)
     {
-        if((((j + gInputCtrl.LcdSegment.col) % LCD_SEGMENT_COLS) == 0) && (j != 0))
-            temp_row++;
         if((j < gInputCtrl.LcdSegment.clear_size) && (gInputCtrl.LcdSegment.mask == INPUT_CTRL_UNMASK))
         {
-            Lcd_Segment_Put_Data((uint8_t*)"0",1,(gInputCtrl.LcdSegment.row - temp_row),(j + gInputCtrl.LcdSegment.col) - temp_row*LCD_SEGMENT_COLS);
+            Lcd_Segment_Put_Data((uint8_t*)"0",1,(gInputCtrl.LcdSegment.row - (j + gInputCtrl.LcdSegment.col) / LCD_SEGMENT_COLS),(j + gInputCtrl.LcdSegment.col)%LCD_SEGMENT_COLS);
         }else
         {
-            Lcd_Segment_Put_Data((uint8_t*)" ",1,(gInputCtrl.LcdSegment.row - temp_row),(j + gInputCtrl.LcdSegment.col) - temp_row*LCD_SEGMENT_COLS); 
+            Lcd_Segment_Put_Data((uint8_t*)" ",1,(gInputCtrl.LcdSegment.row - (j + gInputCtrl.LcdSegment.col) / LCD_SEGMENT_COLS),(j + gInputCtrl.LcdSegment.col)%LCD_SEGMENT_COLS); 
         }
     }
     LcdSegmentDisplaySetEvent();
 }
 /***************************** Function to handle input data from keypad *************************************/
-const uint8_t Password1[] = {KEYPAD_ENTER,KEYPAD_ENTER,KEYPAD_CLEAR,KEYPAD_ENTER,KEYPAD_CLEAR};
-const uint8_t Password2[] = {KEYPAD_CLEAR,KEYPAD_CLEAR,KEYPAD_CLEAR};
-const uint8_t Password3[] = {KEYPAD_ENTER,KEYPAD_ENTER,KEYPAD_ENTER,KEYPAD_ENTER,KEYPAD_ENTER};
-#define NO_PASSWORD_CHECK       0
-#define PASSWORD_CHECKING       1
-
-#define NORMAL_KEY              0
-#define SPECIAL_KEY             1
-#define UNKNOWN_KEY             2
-#define LOSS_KEY                3
 
 static uint8_t LcdCharacter_CursorPosition_CheckRight(void)
 {
@@ -615,12 +728,18 @@ static uint8_t LcdCharacter_CursorPosition_CheckRight(void)
     lcd_Read_Current_Position(&row,&col);
     temp1 = row*MAX_CHARACTER_OF_LINE + col;
     temp2 = gInputCtrl.LcdCharacter.row*MAX_CHARACTER_OF_LINE + gInputCtrl.LcdCharacter.col;
-    if((temp2 + temp) > temp1)
-    {
-        return 1;
-    }else
+    if(temp1 >= gInputCtrl.LcdCharacter.max_size + temp2 - 1)
     {
         return 0;
+    }else
+    {
+        if((temp2 + temp ) > temp1)
+        {
+            return 1;
+        }else
+        {
+            return 0;
+        }
     }
 }
 
@@ -649,7 +768,10 @@ static uint8_t SpecialKeyCheck(KeypadStatus_t *KeypadStatus)
         {
             if(!((KeypadStatus->PreviousStatus == KEYPAD_ENTER) || (KeypadStatus->PreviousStatus == KEYPAD_CLEAR)))
             {
-                Lcd_Move_Cursor_Right();
+                if(LcdCharacter_CursorPosition_CheckRight() == 1)
+                {
+                    Lcd_Move_Cursor_Right();
+                }
             }
         }
         RetValue = UNKNOWN_KEY;
@@ -669,7 +791,7 @@ static uint8_t SpecialKeyCheck(KeypadStatus_t *KeypadStatus)
                 else
                 {
                     temp = Lcd_Read_Data(gInputCtrl.LcdCharacter.row,gInputCtrl.LcdCharacter.col,NULL,gInputCtrl.LcdCharacter.max_size);
-                    LcdCharacter_PutString(gInputCtrl.LcdCharacter.row,gInputCtrl.LcdCharacter.col,NULL,0,0);
+                    LcdCharacter_PutString(gInputCtrl.LcdCharacter.row,gInputCtrl.LcdCharacter.col,NULL,0,DISPLAY_STRING,0);
                 }
             }
         }else if(KeypadStatus->CurrentStatus == KEYPAD_BACKWARD)
@@ -683,8 +805,14 @@ static uint8_t SpecialKeyCheck(KeypadStatus_t *KeypadStatus)
                 else
                 {
                     temp = Lcd_Read_Data(gInputCtrl.LcdCharacter.row,gInputCtrl.LcdCharacter.col,NULL,gInputCtrl.LcdCharacter.max_size);
-                    temp = gInputCtrl.LcdCharacter.row*MAX_CHARACTER_OF_LINE + gInputCtrl.LcdCharacter.col + temp;
-                    LcdCharacter_PutString(temp/MAX_CHARACTER_OF_LINE,temp%MAX_CHARACTER_OF_LINE,NULL,0,0);
+                    if(temp == gInputCtrl.LcdCharacter.max_size)
+                    {
+                        temp = gInputCtrl.LcdCharacter.row*MAX_CHARACTER_OF_LINE + gInputCtrl.LcdCharacter.col + temp - 1;
+                    }else
+                    {
+                        temp = gInputCtrl.LcdCharacter.row*MAX_CHARACTER_OF_LINE + gInputCtrl.LcdCharacter.col + temp;
+                    }
+                    LcdCharacter_PutString(temp / MAX_CHARACTER_OF_LINE, temp % MAX_CHARACTER_OF_LINE, NULL, 0, DISPLAY_STRING, 0);
                 }
                 
             }
@@ -718,11 +846,13 @@ static uint8_t SpecialKeyCheck(KeypadStatus_t *KeypadStatus)
                 }else
                 {
                     KeypadStatus->PushTime = 0;
-                    if(!((KeypadStatus->PreviousStatus == KEYPAD_UNKNOWN)||(KeypadStatus->PreviousStatus == KEYPAD_BACKWARD)
-                        ||(KeypadStatus->PreviousStatus == KEYPAD_FORWARD)||(KeypadStatus->PreviousStatus == KEYPAD_CLEAR)
-                        ||(KeypadStatus->PreviousStatus == KEYPAD_ENDLINE)||(KeypadStatus->PreviousStatus == KEYPAD_FONT)
-                        ||(KeypadStatus->PreviousStatus == KEYPAD_ENTER)))
-                        Lcd_Move_Cursor_Right();
+                    if(KEYPAD_NORMAL_KEY_CHECK(KeypadStatus->PreviousStatus))
+                    {
+                        if(LcdCharacter_CursorPosition_CheckRight() == 1)
+                        {
+                            Lcd_Move_Cursor_Right();
+                        }
+                    }
                 }
             }
             RetValue = NORMAL_KEY;
@@ -759,11 +889,28 @@ static Std_Return_Type Password_Check(KeypadStatus_t *KeypadStatus,Password_t *P
     return RetValue;
 }
 
+static void ResetInputCtrlStatus(void)
+{
+    gInputCtrl.preset_button  = STD_OFF;
+    gInputCtrl.LcdSegment.col = 0;
+    gInputCtrl.LcdSegment.row = 1;
+    gInputCtrl.LcdSegment.len = 0;
+    gInputCtrl.LcdSegment.col_error = 5;
+    gInputCtrl.LcdSegment.row_error = 2;
+    gInputCtrl.LcdSegment.max_size = LCD_SEGMENT_COLS * 2;
+    gInputCtrl.LcdCharacter.max_size = 16;
+    gInputCtrl.LcdCharacter.col = 0;
+    gInputCtrl.LcdCharacter.row = 0;
+    gInputCtrl.LcdCharacter.enable = 1;
+}
 /************************************ Task handler *******************************************/
 static void LcdSegmentDisplay_Task(void *argument)
 {
     //uint32_t flag;
+    /* Lcd Segment initializing*/
     Lcd_Segment_Init();
+//    Lcd_Segment_PWM_Config();
+//    Lcd_Segment_PWM_Start();
     while(1)
     {
         osEventFlagsWait(LcdSegmentStartDisplayFlagId, LCD_SEGMENT_START_DISPLAY_FLAG, osFlagsWaitAny, osWaitForever);
@@ -780,14 +927,35 @@ static void ScanKeypad_DisplayLcdCharacter_Task(void *argument)
     Keypad_Button_Type CurrentStatus,PreviousStatus,BreakTimeStatus;
     BreakTimeStatus = PreviousStatus = CurrentStatus = KEYPAD_UNKNOWN;
     
+    /* Lcd Charater initializing*/
     Lcd_Init_4bits_Mode();
-    LcdCharacter_PutString(0,(MAX_CHARACTER_OF_DISPLAY - strlen((char*)InitialString))/2,(uint8_t*)InitialString,strlen((char*)InitialString),0);
+    //LcdCharacter_PutString(0,(MAX_CHARACTER_OF_DISPLAY - strlen((char*)cInitialString))/2,(uint8_t*)cInitialString,strlen((char*)cInitialString),DISPLAY_STRING,0);
     osTimerStart(Timer1_Id,KEYPAD_SCANNING_DURATION);
-    
+#if (TEST_CODE == 1)
+    LcdCharacter_PutString(0,0,(uint8_t*)"PF2 STATE: ",4,DISPLAY_STRING,0);
+    GPIO_PinState pf2_pre_state,pf2_cur_state;
+    pf2_pre_state = pf2_cur_state = GPIO_PIN_RESET;
+    pf2_cur_state = HAL_GPIO_ReadPin(GPIOF,GPIO_PIN_2);
+    if(pf2_cur_state)
+        LcdCharacter_PutString(1,0,(uint8_t*)"HIGH",4,DISPLAY_STRING,0);
+    else
+        LcdCharacter_PutString(1,0,(uint8_t*)"LOW ",4,DISPLAY_STRING,0);
+#endif
+//    uint8_t j,temp;
     while(1)
     {
         /* Lcd character print*/
         /* pop data from lcd character massage queue*/
+#if (TEST_CODE == 1)
+            pf2_cur_state = HAL_GPIO_ReadPin(GPIOF,GPIO_PIN_2);
+//            if(pf2_cur_state != pf2_pre_state)
+//            {
+                if(pf2_cur_state)
+                    LcdCharacter_PutString(1,0,(uint8_t*)"HIGH",4,DISPLAY_STRING,0);
+                else
+                    LcdCharacter_PutString(1,0,(uint8_t*)"LOW",4,DISPLAY_STRING,0);
+//            }
+#endif
         LcdCharacterEventsFlag = osEventFlagsWait(LcdCharaterDisplayFlag_Id, LCDCHARACTER_CLEAR_CHAR, osFlagsWaitAny, 0);
         if(LcdCharacterEventsFlag == LCDCHARACTER_CLEAR_CHAR)
         {
@@ -795,13 +963,31 @@ static void ScanKeypad_DisplayLcdCharacter_Task(void *argument)
         }
         LcdQueueStatus = osMessageQueueGet(LcdCharacterMsgQueue_Id, &data1, NULL, 0U);   // wait for message
         if (LcdQueueStatus == osOK) {
-            if((data1.line == LCD_PRINT_CHARACTER) || (data1.offset == LCD_PRINT_CHARACTER))
-            {
-                Lcd_Put_Char(data1.msg[0]);
-            }else
+            if(data1.type == DISPLAY_STRING)
             {
                 Lcd_Put_String(data1.line,data1.offset,data1.msg,data1.length);
+            }else if(data1.type == DISPLAY_CHARACTER)
+            {
+                Lcd_Put_Char(data1.msg[0]);
+            }else if(data1.type == CLEAR_CHARACTER)
+            {
+                Lcd_Clear_Character();
             }
+//            else if(data1.type == DISPLAY_INVERSE_STRING)
+//            {
+//                Lcd_Put_String(data1.line,data1.offset,NULL,0);
+//                for(j=0;j<data1.length;j++)
+//                {
+//                    Lcd_Read_Data(LCD_CURRENT_POSITION,LCD_CURRENT_POSITION,&temp,1);
+//                    if((temp == '.')||(temp == ','))
+//                    {
+//                        Lcd_Move_Cursor_Left();
+//                    }
+//                    Lcd_Put_Char(data1.msg[data1.length-j-1]);
+//                    Lcd_Move_Cursor_Left();
+//                }
+//                Lcd_Put_String(data1.line,data1.offset,NULL,0);
+//            }
             osMemoryPoolFree(LcdCharacter_MemoryPool_Id,data1.msg);
         }
         
@@ -842,7 +1028,7 @@ static void ScanKeypad_DisplayLcdCharacter_Task(void *argument)
         }
     }
 }
-
+    
 static void CommandHandler_Task(void *argument)
 {
     Std_Return_Type retValue = E_OK;
@@ -852,13 +1038,15 @@ static void CommandHandler_Task(void *argument)
     
     uint16_t False_Msg_number = 0;
     uint8_t invalid_format = 0;
-    uint16_t Msg_number = 0;
+    uint32_t Msg_number = 0;
     uint16_t feadback = 0;
+    LcdCharacter_PutString(0,9,(uint8_t*)"F 0",3,DISPLAY_STRING,0);
+    LcdCharacter_PutString(1,9,(uint8_t*)"I 0",3,DISPLAY_STRING,0);
 #endif
     uint8_t OpCode=0;
     uint16_t Length=0;
     uint8_t *RxData;
-    uint8_t StateSwitch = 0;
+    uint8_t RxState = 0;
     
     RxData = (uint8_t*)osMemoryPoolAlloc(RxDataMemoryPool_Id,0U);
     
@@ -872,9 +1060,11 @@ static void CommandHandler_Task(void *argument)
 #if (TEST_CODE == 1)
             Msg_number++;
             if(Msg_number == 0)
-                LcdCharacter_PutString(0,0,(uint8_t*)"     ",5,0);
+                LcdCharacter_PutString(0,0,(uint8_t*)"         ",9,DISPLAY_STRING,0);
             DecToString(num,Msg_number);
-            LcdCharacter_PutString(0,0,(uint8_t*)num,strlen((char*)num),0);
+//            Lcd_Segment_Put_Data((uint8_t*)num,strlen((char*)num),0,0);
+//            LcdSegmentDisplaySetEvent();
+            LcdCharacter_PutString(0,0,(uint8_t*)num,strlen((char*)num),DISPLAY_STRING,0);
 #endif
             /*Notify the command to relevant task*/
             switch(OpCode)
@@ -884,28 +1074,28 @@ static void CommandHandler_Task(void *argument)
                 {
                     False_Msg_number++;
                     DecToString(False_num,False_Msg_number);
-                    LcdCharacter_PutString(0,12,(uint8_t*)False_num,strlen((char*)False_num),0);
+                    LcdCharacter_PutString(0,12,(uint8_t*)False_num,strlen((char*)False_num),DISPLAY_STRING,0);
                     break;
                 }
                 case 0xfe:
                 {
                     invalid_format++;
                     DecToString(False_num,invalid_format);
-                    LcdCharacter_PutString(1,12,(uint8_t*)False_num,strlen((char*)False_num),0);
+                    LcdCharacter_PutString(1,12,(uint8_t*)False_num,strlen((char*)False_num),DISPLAY_STRING,0);
                     break;
                 }
                 case 0xfc:
                 {
                     feadback++;
                     if(feadback == 0)
-                        LcdCharacter_PutString(1,0,(uint8_t*)"     ",5,0);
+                        LcdCharacter_PutString(1,0,(uint8_t*)"     ",5,DISPLAY_STRING,0);
                     DecToString(False_num,feadback);
                     LcdCharacter_PutString(1,0,(uint8_t*)False_num,strlen((char*)False_num),0);
                     break;
                 }
-                case 0x05:
+                case 0xfd:
                 {
-                    LcdCharacter_PutString(0,7,(uint8_t*)"POL",3,0);
+                    LcdCharacter_PutString(1,0,(uint8_t*)"POL   ",6,DISPLAY_STRING,0);
                     break;
                 }
 #endif
@@ -913,32 +1103,8 @@ static void CommandHandler_Task(void *argument)
                 case 0x11:
                 {
                     /* Data = Data | 0x80 */
-                    StateSwitch = RxData[0] & 0x7F;
-                    switch(StateSwitch)
-                    {
-                        case 0:
-                            gCurrentState = IDLE_STATE;
-                            Lcd_DisplayShift_Turn_Off();
-                            break;
-                        case 0x01:
-                            /*Go to system setting mode*/
-                            gCurrentState = PUMP_SETTING_STATE;
-                            Lcd_DisplayShift_Turn_Off();
-                            break;
-                        case 0x02:
-                            /*Go to printing mode*/
-                            gCurrentState = PRINTER_SETTING_STATE;
-                            Lcd_DisplayShift_Turn_On();
-                            break;
-                        case 0x03:
-                            /*Go to fueling mode*/
-                            gCurrentState = FUELING_STATE;
-                            Lcd_DisplayShift_Turn_Off();
-                            break;
-                        default:
-                            gCurrentState = IDLE_STATE;
-                            Lcd_DisplayShift_Turn_Off();
-                    }
+                    RxState = RxData[0] & 0x7F;
+                    SwitchInputState(RxState);
                     break;
                 }
                 /*Special commands for character Lcd*/
@@ -947,6 +1113,9 @@ static void CommandHandler_Task(void *argument)
                 case 0x80:
                 case 0x81:
                 case 0x82:
+#if (TEST_CODE == 1)
+                    LcdCharacter_PutString(1,0,(uint8_t*)"SELECT",6,DISPLAY_STRING,0);
+#endif
                     LcdCharacterProcess(OpCode,RxData,Length);
                     break;
                 /*Special commands for segment Lcd*/
@@ -958,6 +1127,9 @@ static void CommandHandler_Task(void *argument)
                 case 0x90:
                 case 0x91:
                 case 0x92:
+#if (TEST_CODE == 1)
+                    LcdCharacter_PutString(1,0,(uint8_t*)"SELECT",6,DISPLAY_STRING,0);
+#endif
                     LcdSegmentProcess(OpCode,RxData,Length);
                     break;
             }
@@ -969,24 +1141,29 @@ static void CommandHandler_Task(void *argument)
 static void Main_Preset_Task(void *argument)
 {
     uint8_t key = 0;
-    uint8_t SegmentKey[14];
+    //uint8_t SegmentKey[14];
+    //uint8_t i = 0;
     uint8_t Checking = NORMAL_KEY;
-    uint8_t i=0;
+    uint8_t j;
+    j = 0;
     
-    osStatus_t status;
-    KeypadStatus_t KeypadStatus = {KEYPAD_UNKNOWN,KEYPAD_UNKNOWN,0};
+    osStatus_t status,lcdcharacter_status;
+    KeypadStatus_t KeypadStatus = {.PreviousStatus = KEYPAD_UNKNOWN, .CurrentStatus = KEYPAD_UNKNOWN, .PushTime = 0};
+
+#if (TEST_CODE == 1)
+    /* Default display Segment Lcd indicator */
     Lcd_Segment_Put_Indicator(INDICATOR_A1|INDICATOR_A3|INDICATOR_A4|INDICATOR_A5);
     LcdSegmentDisplaySetEvent();
-    
-    //KeypadStatus_t KeypadStatus = {KEYPAD_UNKNOWN,KEYPAD_UNKNOWN,0};
-    Password_t passcheck_1 = {(uint8_t*)Password1, sizeof(Password1),NO_PASSWORD_CHECK};
-    Password_t passcheck_2 = {(uint8_t*)Password2, sizeof(Password2),NO_PASSWORD_CHECK};
-#if (TEST_CODE == 0)
-    Password_t passcheck_3 = {(uint8_t*)Password3, sizeof(Password3),NO_PASSWORD_CHECK};
 #endif
-    gInputCtrl.LcdCharacter.max_size = 80;
-    uint8_t Registration_Pass = REGISTRATION_PASS;
-    uint8_t Process_Pass      = PROCESS_PASS;
+    
+    Password_t Registration_check  = {(uint8_t*)Registration_CombineKeys , sizeof(Registration_CombineKeys) ,NO_PASSWORD_CHECK};
+    Password_t DirectSetting_check = {(uint8_t*)DirectSetting_CombineKeys, sizeof(DirectSetting_CombineKeys),NO_PASSWORD_CHECK};
+#if (TEST_CODE == 1)
+    Password_t Printing_check      = {(uint8_t*)Printing_CombineKeys     , sizeof(Printing_CombineKeys)     ,NO_PASSWORD_CHECK};
+#endif
+    ResetInputCtrlStatus();
+    
+    
     while(1)
     {
         status = osMessageQueueGet(KeypadInputQueue_Id, &(KeypadStatus.CurrentStatus), NULL, osWaitForever);
@@ -997,33 +1174,65 @@ static void Main_Preset_Task(void *argument)
             {
                 case IDLE_STATE:
                 {
-                    if(E_OK == Password_Check(&KeypadStatus,&passcheck_1))
+                    if(E_OK == Password_Check(&KeypadStatus,&Registration_check))
                     {
-                        RS485_Prepare_To_Transmit(0xA0,&Registration_Pass,1);
+                        RS485_Prepare_To_Transmit(0xA0,(uint8_t*)&Registration_Passcode,1);
                         
 #if (TEST_CODE == 1)
                         Lcd_Segment_Put_Data((uint8_t*)"code",4,2,0);
                         LcdSegmentDisplaySetEvent();
                         gCurrentState = PUMP_SETTING_STATE;
-                        gInputCtrl.mask = INPUT_CTRL_MASK;
+                        gInputCtrl.LcdSegment.mask = INPUT_CTRL_MASK;
+                        gInputCtrl.LcdSegment.enable = 1;
+                        gInputCtrl.LcdSegment.max_size = 9;
+                        gInputCtrl.LcdSegment.row = 1;
 #endif
                     }
-#if (TEST_CODE == 0)
-                    if(E_OK == Password_Check(&KeypadStatus,&passcheck_3))
+#if (TEST_CODE == 1)
+                    if(E_OK == Password_Check(&KeypadStatus,&Printing_check))
                     {
-                        RS485_Prepare_To_Transmit(0xA0,(uint8_t*)"XXXXX",5);
+                        //RS485_Prepare_To_Transmit(0xA0,(uint8_t*)"XXXXX",5);
                         Lcd_Segment_Put_Data((uint8_t*)"print",5,2,0);
                         LcdSegmentDisplaySetEvent();
                         /*reset lcd character*/
                         Lcd_Clear();
-                        Lcd_DisplayShift_Turn_On();
+                        Lcd_ShiftDisplay_Turn_On();
                         gCurrentState = PRINTER_SETTING_STATE;
+                        gInputCtrl.LcdCharacter.row = 0;
+                        gInputCtrl.LcdCharacter.col = 0;
+                        gInputCtrl.LcdCharacter.max_size = 80;
                         Lcd_Turn_On_Cursor();
                     }
 #endif
                     if(Checking == NORMAL_KEY)
                     {
-                        
+                        if(lcdcharacter_status == osOK)
+                        {
+                            if(gInputCtrl.LcdCharacter.enable == 1)
+                            {
+                                if(gInputCtrl.LcdCharacter.len >= gInputCtrl.LcdCharacter.max_size)
+                                {
+                                    gInputCtrl.LcdCharacter.len = 0;
+                                }
+                                key = Keypad_Mapping_Printer(KeypadStatus.CurrentStatus,0);
+                                if(!((gInputCtrl.LcdCharacter.len == 0) && (key == '0')))
+                                {
+                                    gInputCtrl.LcdCharacter.buf[gInputCtrl.LcdCharacter.len]=key;
+                                    gInputCtrl.LcdCharacter.len++;
+                                    //LcdCharacter_PutString(gInputCtrl.LcdCharacter.row,gInputCtrl.LcdCharacter.col,(uint8_t*)gInputCtrl.LcdCharacter.buf,gInputCtrl.LcdCharacter.len,DISPLAY_INVERSE_STRING,0);
+                                    /* Send input from keypad by 0xA2 command*/
+                                    RS485_Prepare_To_Transmit(0xA2,(uint8_t*)gInputCtrl.LcdCharacter.buf,gInputCtrl.LcdCharacter.len);
+                                }
+                            }
+                        }
+                    }else if(Checking == SPECIAL_KEY)
+                    {
+                        if(KEYPAD_SPECIAL_KEY_CHECK(KeypadStatus.CurrentStatus))
+                        {
+                            gInputCtrl.LcdCharacter.len = 0;
+                        }
+                        key = Keypad_Mapping(KeypadStatus.CurrentStatus);
+                        RS485_Prepare_To_Transmit(0xA0,(uint8_t*)&key,1);
                     }
                     break;
                 }
@@ -1033,89 +1242,75 @@ static void Main_Preset_Task(void *argument)
                 }
                 case PUMP_SETTING_STATE:
                 {
-                    if(E_OK == Password_Check(&KeypadStatus,&passcheck_2))
+                    if(E_OK == Password_Check(&KeypadStatus,&DirectSetting_check))
                     {
-                        RS485_Prepare_To_Transmit(0xA0,&Process_Pass,3);
+                        RS485_Prepare_To_Transmit(0xA0,(uint8_t*)&DirectSetting_Passcode,3);
 #if (TEST_CODE == 1)
                         Lcd_Segment_Put_Data((uint8_t*)"00     ",7,2,0);
                         LcdSegmentDisplaySetEvent();
-                        gInputCtrl.mask = INPUT_CTRL_UNMASK;
+                        gInputCtrl.LcdSegment.mask = INPUT_CTRL_UNMASK;
 #endif
                         
                     }else 
                     {
-                        if(Checking != UNKNOWN_KEY)
+                        if(Checking == UNKNOWN_KEY)
                         {
-                            if(Checking == NORMAL_KEY)
-                            {
-                                key = Keypad_Mapping_Printer(KeypadStatus.CurrentStatus,0);
-                                if(gInputCtrl.LcdSegment.enable == 1)
-                                {
-                                    if(i < gInputCtrl.LcdSegment.max_size)
-                                    {
-                                        if(i==0)
-                                        {
-                                            LcdSegment_PrepareNewInput();
-                                        }
-                                        if(gInputCtrl.LcdSegment.mask == INPUT_CTRL_MASK)
-                                        {
-                                            SegmentKey[i]=key;
-                                            if(i < 14)
-                                            {
-                                                if(i >= (7-gInputCtrl.LcdSegment.col))
-                                                {
-                                                    Lcd_Segment_Put_Data((uint8_t*)"-",1,(gInputCtrl.LcdSegment.row - 1),i - 7);
-                                                }else
-                                                {
-                                                    Lcd_Segment_Put_Data((uint8_t*)"-",1,gInputCtrl.LcdSegment.row,i);
-                                                }
-                                                i++;
-                                            }
-                                        }else if(gInputCtrl.LcdSegment.mask == INPUT_CTRL_UNMASK)
-                                        {
-                                            if(i < 14)
-                                            {
-                                                SegmentKey[i]=key;
-                                                i++;
-                                                if(i >= (7-gInputCtrl.LcdSegment.col))
-                                                {
-                                                    Lcd_Segment_Put_Data((uint8_t*)SegmentKey,(i-7+gInputCtrl.LcdSegment.col),gInputCtrl.LcdSegment.row - 1,0);
-                                                    Lcd_Segment_Put_Data((uint8_t*)&SegmentKey[i- 7 + gInputCtrl.LcdSegment.col],(7 - gInputCtrl.LcdSegment.col),gInputCtrl.LcdSegment.row,gInputCtrl.LcdSegment.col);
-                                                }else
-                                                {
-                                                    Lcd_Segment_Put_Data((uint8_t*)SegmentKey,i,gInputCtrl.LcdSegment.row,gInputCtrl.LcdSegment.col);
-                                                }
-                                            }
-                                        }
-                                        LcdSegmentDisplaySetEvent();
-                                    }
-                                }
-                            }else if(Checking == SPECIAL_KEY)
-                            {
-                                if((KeypadStatus.CurrentStatus == KEYPAD_ENTER) || (KeypadStatus.CurrentStatus == KEYPAD_CLEAR))
-                                {
-                                    if(KeypadStatus.CurrentStatus == KEYPAD_ENTER)
-                                    {
-                                        RS485_Prepare_To_Transmit(0xA1,(uint8_t*)SegmentKey,i);
-                                    }
-                                    sprintf((char*)SegmentKey,"");
-                                    i=0;
-                                }else 
-                                {
-                                    if((gInputCtrl.preset_button == 1) && (gInputCtrl.LcdSegment.enable == 1))
-                                    {
-                                        key = Keypad_Mapping(KeypadStatus.CurrentStatus);
-                                        RS485_Prepare_To_Transmit(0xA0,(uint8_t*)&key,1);
-                                        sprintf((char*)SegmentKey,"");
-                                        i=0;
-                                    }
-                                }
-                            }
-                        }else
-                        {
+                            /**/
                             if((KeypadStatus.PreviousStatus == KEYPAD_CLEAR) && (gInputCtrl.LcdSegment.enable == 1))
                             {
                                 LcdSegment_PrepareNewInput();
+                            }
+                        }else if(Checking == NORMAL_KEY)
+                        {
+                            key = Keypad_Mapping_Printer(KeypadStatus.CurrentStatus,0);
+                            if(gInputCtrl.LcdSegment.enable == 1)
+                            {
+                                if(gInputCtrl.LcdSegment.len >= gInputCtrl.LcdSegment.max_size)
+                                {
+                                    gInputCtrl.LcdSegment.len = 0;
+                                }
+                                if(gInputCtrl.LcdSegment.len == 0)
+                                {
+                                    LcdSegment_PrepareNewInput();
+                                }
+                                if(gInputCtrl.LcdSegment.len < 14)
+                                {
+                                    gInputCtrl.LcdSegment.buf[gInputCtrl.LcdSegment.len]=key;
+                                    gInputCtrl.LcdSegment.len++;
+                                    if(gInputCtrl.LcdSegment.mask == INPUT_CTRL_MASK)
+                                    {
+                                        /* mask number display by '-' character */
+                                        Lcd_Segment_Put_Data((uint8_t*)"-" , 1 , (gInputCtrl.LcdSegment.row - (gInputCtrl.LcdSegment.len + gInputCtrl.LcdSegment.col -1) / LCD_SEGMENT_COLS) , (gInputCtrl.LcdSegment.len + gInputCtrl.LcdSegment.col - 1) % LCD_SEGMENT_COLS);
+                                    }else if(gInputCtrl.LcdSegment.mask == INPUT_CTRL_UNMASK)
+                                    {
+                                        for(j = 0; j < gInputCtrl.LcdSegment.len; j++)
+                                        {
+                                            Lcd_Segment_Put_Data((uint8_t*)&gInputCtrl.LcdSegment.buf[gInputCtrl.LcdSegment.len - j - 1] , 1 , (gInputCtrl.LcdSegment.row - (j + gInputCtrl.LcdSegment.col) / LCD_SEGMENT_COLS) ,(j + gInputCtrl.LcdSegment.col) % LCD_SEGMENT_COLS);
+                                        }
+                                    }
+                                }
+                                LcdSegmentDisplaySetEvent();
+                            }
+                        }else if(Checking == SPECIAL_KEY)
+                        {
+                            if((KeypadStatus.CurrentStatus == KEYPAD_ENTER) || (KeypadStatus.CurrentStatus == KEYPAD_CLEAR))
+                            {
+                                if(KeypadStatus.CurrentStatus == KEYPAD_ENTER)
+                                {
+                                    /*Send input date to cpu*/
+                                    RS485_Prepare_To_Transmit(0xA1,(uint8_t*)gInputCtrl.LcdSegment.buf,gInputCtrl.LcdSegment.len);
+                                }
+                                sprintf((char*)gInputCtrl.LcdSegment.buf,"");
+                                gInputCtrl.LcdSegment.len=0;
+                            }else 
+                            {
+                                if((gInputCtrl.preset_button == 1) && (gInputCtrl.LcdSegment.enable == 1))
+                                {
+                                    key = Keypad_Mapping(KeypadStatus.CurrentStatus);
+                                    RS485_Prepare_To_Transmit(0xA0,(uint8_t*)&key,1);
+                                    sprintf((char*)gInputCtrl.LcdSegment.buf,"");
+                                    gInputCtrl.LcdSegment.len = 0;
+                                }
                             }
                         }
                     }
@@ -1127,13 +1322,19 @@ static void Main_Preset_Task(void *argument)
                     {
                         key = Keypad_Mapping_Printer(KeypadStatus.CurrentStatus,KeypadStatus.PushTime);
                         /*stupid code*/
-                        LcdCharacter_PutString(LCD_PRINT_CHARACTER,LCD_PRINT_CHARACTER,&key,1,0);
+                        lcdcharacter_status = osMutexAcquire(LcdCharacter_Mutex_Id, 0);
+                        if(lcdcharacter_status == osOK)
+                        {
+                            LcdCharacter_PutString(LCD_CURRENT_POSITION,LCD_CURRENT_POSITION,&key,1,DISPLAY_CHARACTER,0);
+                            osMutexRelease(LcdCharacter_Mutex_Id);
+                        }
                     }else if(Checking == SPECIAL_KEY)
                     {
                         if(KeypadStatus.CurrentStatus == KEYPAD_ENTER)
                         {
-                            LcdCharacterInputLength = Lcd_Read_Data(gInputCtrl.LcdCharacter.row,gInputCtrl.LcdCharacter.col,(uint8_t*)&LcdCharacterInput,gInputCtrl.LcdCharacter.max_size);
-                            RS485_Prepare_To_Transmit(0xA2,(uint8_t*)&LcdCharacterInput,LcdCharacterInputLength);
+                            /* Send content of character lcd in area that define in global input control struct */
+                            gInputCtrl.LcdCharacter.len = Lcd_Read_Data(gInputCtrl.LcdCharacter.row,gInputCtrl.LcdCharacter.col,(uint8_t*)gInputCtrl.LcdCharacter.buf,gInputCtrl.LcdCharacter.max_size);
+                            RS485_Prepare_To_Transmit(0xA2,(uint8_t*)&gInputCtrl.LcdCharacter.buf,gInputCtrl.LcdCharacter.len);
                         }
                     }
                     break;
@@ -1141,13 +1342,14 @@ static void Main_Preset_Task(void *argument)
                 default:
                     break;
             }
-            /* backup previous input status */
+            /* backup current input status into previous state variable*/
             KeypadStatus.PreviousStatus = KeypadStatus.CurrentStatus;
         }
     }
 }
 
 /************************************ Callback handler *******************************************/
+/* Timer calback function that handle keypad input */
 void Timer1_Callback (void *arg)
 {
     KeypadScaningStatus = E_OK;
@@ -1158,6 +1360,7 @@ void Timer2_Callback (void *arg)
     gInputDone = E_OK;
 }
 
+/* Timer calback function that handle segment lcd blinking */
 void Timer3_Callback (void *arg)
 {
     gBlink = gBlink ^1;
@@ -1165,6 +1368,7 @@ void Timer3_Callback (void *arg)
     {
         if(gBlink == 1)
         {
+            /*NOTE: This code may be wrong in some situations if col param set by input max_size*/
             Lcd_Segment_Put_Data((uint8_t*)"_",1,gInputCtrl.LcdSegment.row,gInputCtrl.LcdSegment.max_size);
         }else
         {
@@ -1178,7 +1382,7 @@ void Timer3_Callback (void *arg)
             Lcd_Segment_Put_Data((uint8_t*)gInputCtrl.ErrorCode,gInputCtrl.ErrorCodeLength,gInputCtrl.LcdSegment.row_error,gInputCtrl.LcdSegment.col_error);
         }else
         {
-            Lcd_Segment_Put_Data((uint8_t*)ErrorCodeClear,gInputCtrl.ErrorCodeLength,gInputCtrl.LcdSegment.row_error,gInputCtrl.LcdSegment.col_error);
+            Lcd_Segment_Put_Data((uint8_t*)cErrorCodeClear,gInputCtrl.ErrorCodeLength,gInputCtrl.LcdSegment.row_error,gInputCtrl.LcdSegment.col_error);
         }
         LcdSegmentDisplaySetEvent();
     }
@@ -1194,7 +1398,7 @@ void Peco10_Preset_Init_All(void)
   gMainAddress = Config_Switch_Get_Value();
   gSubAddress = gMainAddress + 2;
   gSubAddress_Coressponding = gMainAddress + 3;
-  
+    
   /*Create Threads*/
   LcdSegmentDisplay_Task_Id                  = osThreadNew(LcdSegmentDisplay_Task, NULL, &LcdSegmentDisplay_Task_Attr);
   ScanKeypad_DisplayLcdCharacter_Task_Id     = osThreadNew(ScanKeypad_DisplayLcdCharacter_Task, NULL, &ScanKeypad_DisplayLcdCharacter_Task_Attr);
@@ -1212,6 +1416,9 @@ void Peco10_Preset_Init_All(void)
   /*Create pool data*/
   RxDataMemoryPool_Id = osMemoryPoolNew(RXDATA_POOL_ELEMENT_NUMBER, RXDATA_POOL_ELEMENT_SIZE, NULL);
   LcdCharacter_MemoryPool_Id = osMemoryPoolNew(LCDCHARACTER_POOL_ELEMENT_NUMBER, LCDCHARACTER_POOL_ELEMENT_SIZE, NULL);
+  
+  /*Create Mutex*/
+  LcdCharacter_Mutex_Id = osMutexNew(NULL);
   
   /*Create os timers*/
   Timer1_Id = osTimerNew(Timer1_Callback, osTimerPeriodic, NULL, NULL);

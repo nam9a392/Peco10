@@ -43,6 +43,7 @@ static volatile uint8_t gDisplayPosition = 0;
 /* Cache buffer store current DDRAM values */
 static volatile uint8_t LcdCharacterDataDisplay[LCD_CHARACTER_LINES*MAX_CHARACTER_OF_LINE] = {0};
 static volatile uint8_t gDisplayShift = STD_OFF;
+static volatile Lcd_Display_Mode_t gDisplayMode = NORMAL_MODE;
 /*==================================================================================================
 *                                       FUNCTION PROTOTYPES
 ==================================================================================================*/
@@ -253,6 +254,7 @@ void Lcd_Init_4bits_Mode(void)
     lcd_send_command(LCD_CMD_INCADD);
     udelay(40);
     
+    gDisplayMode = NORMAL_MODE;
     gDisplayShift = STD_OFF;
 }
 
@@ -289,14 +291,15 @@ void Lcd_Clear_Character(void)
 void Lcd_Put_String(uint8_t line, uint8_t offset, uint8_t *pString, uint16_t length)
 {
     uint16_t i=0;
+    /* Check input validation */
     if((line > LCD_CHARACTER_LINES - 1) || (offset > MAX_CHARACTER_OF_LINE - 1))
     {
         return;
     }
     if((line != LCD_CURRENT_POSITION) && (offset != LCD_CURRENT_POSITION))
     {
-        gCurrent_Cursor_Posistion.col = offset;
-        gCurrent_Cursor_Posistion.line = line;
+//        gCurrent_Cursor_Posistion.col = offset;
+//        gCurrent_Cursor_Posistion.line = line;
         Lcd_Set_Cursor(line,offset);
     }
     for (i=0 ; i<length ; i++)
@@ -318,15 +321,15 @@ uint8_t Lcd_Read_Data(uint8_t line, uint8_t offset, uint8_t *pData, uint8_t leng
     temp = count = 0;
     count = length;
     /*check input position valid*/
-    if((line > LCD_CHARACTER_LINES - 1) || (offset > MAX_CHARACTER_OF_LINE - 1))
-    {
-        return 0;
-    }
     if((line == LCD_CURRENT_POSITION) && (offset == LCD_CURRENT_POSITION))
     {
         line   = gCurrent_Cursor_Posistion.line;
         offset = gCurrent_Cursor_Posistion.col;
+    }else if((line > LCD_CHARACTER_LINES - 1) || (offset > MAX_CHARACTER_OF_LINE - 1))
+    {
+        return 0;
     }
+    
     temp  = line*MAX_CHARACTER_OF_LINE + offset + length;
     if(temp > (LCD_CHARACTER_LINES*MAX_CHARACTER_OF_LINE))
     {
@@ -352,7 +355,7 @@ void Lcd_Move_Cursor_Right(void)
 {
     /*stop cursor at max horizone*/
     if(!((gCurrent_Cursor_Posistion.col == (MAX_CHARACTER_OF_LINE - 1)) && (gCurrent_Cursor_Posistion.line == (LCD_CHARACTER_LINES - 1))))
-        {
+    {
         gCurrent_Cursor_Posistion.col++;
         /*shift display to the left if cursor reach right horizon*/
         if((gCurrent_Cursor_Posistion.col > (gDisplayPosition + (MAX_CHARACTER_OF_DISPLAY - 1))) && (gDisplayShift == STD_ON))
@@ -383,8 +386,6 @@ void Lcd_Move_Cursor_Left(void)
             gCurrent_Cursor_Posistion.line ^= 1;
             /*Shift display to the right*/
             Lcd_Display_Move_Right();
-            lcd_send_command(LCD_CURSOR_MOVE|LCD_SHIFT_LEFT);
-            udelay(40);
         }else
         {
             gCurrent_Cursor_Posistion.col--;
@@ -392,10 +393,10 @@ void Lcd_Move_Cursor_Left(void)
             {
                 Lcd_Display_Move_Right();
             }
-             /*shift cursor position to the left*/    
-            lcd_send_command(LCD_CURSOR_MOVE|LCD_SHIFT_LEFT);
-            udelay(40);
         }
+        /*shift cursor position to the left*/ 
+        lcd_send_command(LCD_CURSOR_MOVE|LCD_SHIFT_LEFT);
+        udelay(40);
     }
 }
 
@@ -467,14 +468,19 @@ void Lcd_Cursor_Effect(uint8_t CursorEffect)
     udelay(40);
 }
 
-void Lcd_DisplayShift_Turn_On(void)
+void Lcd_ShiftDisplay_Turn_On(void)
 {
     gDisplayShift = STD_ON;
 }
 
-void Lcd_DisplayShift_Turn_Off(void)
+void Lcd_ShiftDisplay_Turn_Off(void)
 {
     gDisplayShift = STD_OFF;
+}
+
+void Lcd_SetDisplayMode(Lcd_Display_Mode_t mode)
+{
+    gDisplayMode = mode;
 }
 
 void Lcd_Turn_On_Cursor(void)

@@ -25,13 +25,21 @@
 #define KEYPAD_ENDLINE              KEYPAD_PRESET_3
 #define KEYPAD_FONT                 KEYPAD_PRESET_4
 
+#define KEYPAD_SPECIAL_KEY_CHECK(x)   ((x == KEYPAD_ENTER) || (x == KEYPAD_CLEAR) || \
+                                       (x == KEYPAD_PRESET_1) || (x == KEYPAD_PRESET_2) || \
+                                       (x == KEYPAD_PRESET_3) || (x == KEYPAD_PRESET_4))
+
+#define KEYPAD_NORMAL_KEY_CHECK(x)    ((x == KEYPAD_NUMBER_0) || (x == KEYPAD_NUMBER_1) || (x == KEYPAD_NUMBER_2) || \
+                                       (x == KEYPAD_NUMBER_3) || (x == KEYPAD_NUMBER_4) || (x == KEYPAD_NUMBER_5) || \
+                                       (x == KEYPAD_NUMBER_6) || (x == KEYPAD_NUMBER_7) || (x == KEYPAD_NUMBER_8) || \
+                                       (x == KEYPAD_NUMBER_9))
 /*==================================================================================================
                                            CONSTANTS
 ==================================================================================================*/
 
 static const uint8_t KeyMap[NUM_ROWS*NUM_COLS]={
-0x31,0x32,0x33,0x34,
-0x21,0x22,0x23,0x24,
+0x30,0x31,0x32,0x33,
+0x20,0x21,0x22,0x23,
 0x10,0x11,0x12,0x13,
 0   ,0x01,0x02,0x03
 };
